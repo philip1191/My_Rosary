@@ -105,31 +105,20 @@ function editScripture(id=null){
  const newId=id||crypto.randomUUID();await track(store.mutate(s=>{const items=editableScriptures(s.decades[target]);const found=items.find(x=>x.id===newId);if(found){found.title=title;found.body=body;}else items.push({id:newId,title,body});}));renderScriptures(newId);
  });
 }
-// FLIP animation: surrounding rows glide into their new positions while the held row floats.
-function animateListReorder(list,held,operation){
- const rows=[...list.children],before=new Map(rows.map(el=>[el,el.getBoundingClientRect().top]));
- operation();
- if(window.matchMedia('(prefers-reduced-motion: reduce)').matches)return;
- for(const el of rows){if(el===held)continue;const delta=before.get(el)-el.getBoundingClientRect().top;
-  if(Math.abs(delta)>1)el.animate([{transform:`translateY(${delta}px)`},{transform:'translateY(0)'}],{duration:190,easing:'cubic-bezier(.2,.75,.2,1)'});
- }
-}
-function floatHeldRow(row,initialY,currentY){row.style.transform=`translateY(${currentY-initialY}px) scale(1.015)`;}
-function clearHeldRow(row){row.style.transform='';}
 function bindScriptureDrag(list){
- let timer=null,active=null,start=null,lastY=0,raf=null,blockClick=false,heldY=0;
- const reorder=y=>{if(!active)return;const other=[...list.children].filter(x=>x!==active);const next=other.find(x=>{const r=x.getBoundingClientRect();return y<r.top+r.height/2;});if(next!==active?.nextElementSibling || (!next&&active!==list.lastElementChild))animateListReorder(list,active,()=>{if(next)list.insertBefore(active,next);else list.append(active);});};
+ let timer=null,active=null,start=null,lastY=0,raf=null,blockClick=false;
+ const reorder=y=>{if(!active)return;const other=[...list.children].filter(x=>x!==active);const next=other.find(x=>{const r=x.getBoundingClientRect();return y<r.top+r.height/2;});if(next)list.insertBefore(active,next);else list.append(active);};
  const tick=()=>{if(!active)return;if(lastY<80)window.scrollBy(0,-8);else if(lastY>innerHeight-80)window.scrollBy(0,8);reorder(lastY);raf=requestAnimationFrame(tick);};
- const begin=(row,y)=>{active=row;lastY=y;heldY=y;blockClick=true;row.classList.add('dragging');raf=requestAnimationFrame(tick);};
- const finish=async(cancel=false)=>{clearTimeout(timer);timer=null;start=null;if(raf)cancelAnimationFrame(raf);raf=null;if(!active)return;clearHeldRow(active);active.classList.remove('dragging');active=null;if(cancel){renderScriptures();return;}const ids=[...list.children].map(x=>x.dataset.scriptureId),target=decade;try{await track(store.mutate(s=>{const d=s.decades[target],items=editableScriptures(d),byId=new Map(items.map(x=>[x.id,x]));d.scriptures=ids.map(id=>byId.get(id)).filter(Boolean);}));}catch{renderScriptures();}};
+ const begin=(row,y)=>{active=row;lastY=y;blockClick=true;row.classList.add('dragging');raf=requestAnimationFrame(tick);};
+ const finish=async(cancel=false)=>{clearTimeout(timer);timer=null;start=null;if(raf)cancelAnimationFrame(raf);raf=null;if(!active)return;active.classList.remove('dragging');active=null;if(cancel){renderScriptures();return;}const ids=[...list.children].map(x=>x.dataset.scriptureId),target=decade;try{await track(store.mutate(s=>{const d=s.decades[target],items=editableScriptures(d),byId=new Map(items.map(x=>[x.id,x]));d.scriptures=ids.map(id=>byId.get(id)).filter(Boolean);}));}catch{renderScriptures();}};
  for(const row of list.children){
  row.addEventListener('contextmenu',e=>e.preventDefault());
  row.addEventListener('click',e=>{if(blockClick){e.preventDefault();e.stopPropagation();blockClick=false;}},true);
  row.addEventListener('touchstart',e=>{if(e.touches.length!==1||e.target.closest('.actions'))return;const t=e.touches[0];start={x:t.clientX,y:t.clientY};timer=setTimeout(()=>begin(row,t.clientY),500);},{passive:true});
- row.addEventListener('touchmove',e=>{if(e.touches.length!==1){finish(true);return;}const t=e.touches[0];if(active){e.preventDefault();lastY=t.clientY;floatHeldRow(active,heldY,lastY);reorder(lastY);}else if(start&&Math.hypot(t.clientX-start.x,t.clientY-start.y)>9){clearTimeout(timer);timer=null;start=null;}},{passive:false});
+ row.addEventListener('touchmove',e=>{if(e.touches.length!==1){finish(true);return;}const t=e.touches[0];if(active){e.preventDefault();lastY=t.clientY;reorder(lastY);}else if(start&&Math.hypot(t.clientX-start.x,t.clientY-start.y)>9){clearTimeout(timer);timer=null;start=null;}},{passive:false});
  row.addEventListener('touchend',()=>{finish();});row.addEventListener('touchcancel',()=>{finish(true);});
  row.addEventListener('pointerdown',e=>{if(e.pointerType==='touch'||e.target.closest('.actions'))return;start={x:e.clientX,y:e.clientY};timer=setTimeout(()=>begin(row,e.clientY),500);});
- row.addEventListener('pointermove',e=>{if(e.pointerType==='touch')return;if(active){lastY=e.clientY;floatHeldRow(active,heldY,lastY);reorder(lastY);}else if(start&&Math.hypot(e.clientX-start.x,e.clientY-start.y)>9){clearTimeout(timer);timer=null;start=null;}});
+ row.addEventListener('pointermove',e=>{if(e.pointerType==='touch')return;if(active){lastY=e.clientY;reorder(lastY);}else if(start&&Math.hypot(e.clientX-start.x,e.clientY-start.y)>9){clearTimeout(timer);timer=null;start=null;}});
  row.addEventListener('pointerup',e=>{if(e.pointerType!=='touch')finish();});row.addEventListener('pointercancel',e=>{if(e.pointerType!=='touch')finish(true);});
  }
 }
@@ -147,12 +136,12 @@ function renderManage(){
  $$('[data-remove]').forEach(b=>b.onclick=action(async()=>{const id=b.dataset.remove,all=b.dataset.scope==='all',target=decade;if(all&&!confirm('전체 20단에서 이 기도문을 제거할까요? 원본은 기도문 탭에 남습니다.'))return;await track(store.mutate(s=>{for(const [key,d] of Object.entries(s.decades))if(all||Number(key)===target)d.prayers=d.prayers.filter(x=>x!==id);}));renderAssigned();renderManage();}));
 }
 function bindDrag(list,mode='assigned'){
- let timer=null,drag=null,start=null,raf=null,lastY=0,moved=false,heldY=0;
+ let timer=null,drag=null,start=null,raf=null,lastY=0,moved=false;
  const stopScroll=()=>{if(raf)cancelAnimationFrame(raf);raf=null;};
- const reorder=y=>{if(!drag)return;const others=[...list.children].filter(x=>x!==drag);const next=others.find(x=>{const r=x.getBoundingClientRect();return y<r.top+r.height/2;});if(next!==drag?.nextElementSibling || (!next&&drag!==list.lastElementChild))animateListReorder(list,drag,()=>{if(next)list.insertBefore(drag,next);else list.append(drag);});};
+ const reorder=y=>{if(!drag)return;const others=[...list.children].filter(x=>x!==drag);const next=others.find(x=>{const r=x.getBoundingClientRect();return y<r.top+r.height/2;});if(next)list.insertBefore(drag,next);else list.append(drag);};
  const scroll=()=>{if(!drag)return;const margin=80;if(lastY<margin)window.scrollBy(0,-8);else if(lastY>innerHeight-margin)window.scrollBy(0,8);reorder(lastY);raf=requestAnimationFrame(scroll);};
- const begin=(row,y)=>{drag=row;lastY=y;heldY=y;moved=true;row.classList.add('dragging');notify('위아래로 옮긴 뒤 손을 떼세요');raf=requestAnimationFrame(scroll);};
- const finish=async(cancel=false)=>{clearTimeout(timer);timer=null;start=null;stopScroll();if(!drag)return;clearHeldRow(drag);drag.classList.remove('dragging');drag=null;
+ const begin=(row,y)=>{drag=row;lastY=y;moved=true;row.classList.add('dragging');notify('위아래로 옮긴 뒤 손을 떼세요');raf=requestAnimationFrame(scroll);};
+ const finish=async(cancel=false)=>{clearTimeout(timer);timer=null;start=null;stopScroll();if(!drag)return;drag.classList.remove('dragging');drag=null;
   if(cancel){if(mode==='assigned')renderAssigned();else renderPrayers();notify('이동 취소');return;}
   const ids=[...list.children].map(x=>x.dataset.prayer),target=decade;
   try{await track(store.mutate(s=>{if(mode==='library'){const byId=new Map(s.prayers.map(p=>[p.id,p]));s.prayers=ids.map(id=>byId.get(id)).filter(Boolean);}else{const current=s.decades[target].prayers;s.decades[target].prayers=[...ids.filter(id=>current.includes(id)),...current.filter(id=>!ids.includes(id))];}}));}catch{if(mode==='assigned')renderAssigned();else renderPrayers();}
@@ -161,10 +150,10 @@ function bindDrag(list,mode='assigned'){
   row.addEventListener('contextmenu',e=>e.preventDefault());
   row.addEventListener('click',e=>{if(moved){e.preventDefault();e.stopPropagation();moved=false;}},true);
   row.addEventListener('touchstart',e=>{if(e.touches.length!==1||e.target.closest('.actions'))return;const t=e.touches[0];start={x:t.clientX,y:t.clientY};timer=setTimeout(()=>begin(row,t.clientY),500);},{passive:true});
-  row.addEventListener('touchmove',e=>{if(e.touches.length!==1){finish(true);return;}const t=e.touches[0];if(drag){e.preventDefault();lastY=t.clientY;floatHeldRow(drag,heldY,lastY);reorder(lastY);}else if(start&&Math.hypot(t.clientX-start.x,t.clientY-start.y)>9){clearTimeout(timer);timer=null;start=null;}},{passive:false});
+  row.addEventListener('touchmove',e=>{if(e.touches.length!==1){finish(true);return;}const t=e.touches[0];if(drag){e.preventDefault();lastY=t.clientY;reorder(lastY);}else if(start&&Math.hypot(t.clientX-start.x,t.clientY-start.y)>9){clearTimeout(timer);timer=null;start=null;}},{passive:false});
   row.addEventListener('touchend',()=>{finish();});row.addEventListener('touchcancel',()=>finish(true));
   row.onpointerdown=e=>{if(e.pointerType==='touch'||e.button!==0||e.target.closest('.actions'))return;start={x:e.clientX,y:e.clientY};timer=setTimeout(()=>begin(row,e.clientY),500);};
-  row.onpointermove=e=>{if(e.pointerType==='touch')return;if(drag){lastY=e.clientY;floatHeldRow(drag,heldY,lastY);reorder(lastY);}else if(start&&Math.hypot(e.clientX-start.x,e.clientY-start.y)>9){clearTimeout(timer);start=null;}};
+  row.onpointermove=e=>{if(e.pointerType==='touch')return;if(drag){lastY=e.clientY;reorder(lastY);}else if(start&&Math.hypot(e.clientX-start.x,e.clientY-start.y)>9){clearTimeout(timer);start=null;}};
   row.onpointerup=e=>{if(e.pointerType!=='touch')finish();};row.onpointercancel=e=>{if(e.pointerType!=='touch')finish(true);};
  }
 }
@@ -205,31 +194,6 @@ async function showLightboxArt(id){
  }catch(e){if(seq===lightboxSequence)error(e);}
 }
 function advanceArt(step){showLightboxArt((lightboxDecade+step+20)%20);}
-// The swipe rail tracks the finger; neighboring artwork is preloaded from local storage.
-let artRail=null,railURLs=[],railReady=false,railStartX=0,railOffset=0,railBusy=false,railGeneration=0;
-function destroyArtRail(){railGeneration++;if(artRail){artRail.remove();artRail=null;}railURLs.forEach(u=>URL.revokeObjectURL(u));railURLs=[];railReady=false;railBusy=false;railOffset=0;}
-async function prepareArtRail(){
- if(artRail||railBusy||artScale>1.01)return;
- const generation=++railGeneration,container=$('#lightbox'),width=container.clientWidth;
- const rail=document.createElement('div');rail.className='art-swipe-rail';rail.style.width=`${width*3}px`;
- const ids=[(lightboxDecade+19)%20,lightboxDecade,(lightboxDecade+1)%20];
- for(let i=0;i<3;i++){
-  const cell=document.createElement('div');cell.className='art-swipe-cell';cell.style.width=`${width}px`;
-  if(i===1){if(!$('#largeArt').hidden&&$('#largeArt').src){const img=$('#largeArt').cloneNode();img.removeAttribute('id');img.style.transform='none';cell.append(img);}else cell.textContent='등록된 성화가 없습니다';}
-  else {const entry=state.decades[ids[i]];if(entry?.art){try{const asset=await store.getAsset(entry.art);if(generation!==railGeneration)return;if(asset?.blob){const url=URL.createObjectURL(asset.blob);railURLs.push(url);const img=document.createElement('img');img.src=url;img.alt='인접한 단의 성화';cell.append(img);}else cell.textContent='등록된 성화가 없습니다';}catch{cell.textContent='등록된 성화가 없습니다';}}else cell.textContent='등록된 성화가 없습니다';}
-  rail.append(cell);
- }
- if(generation!==railGeneration||!container.open||artScale>1.01){railURLs.forEach(u=>URL.revokeObjectURL(u));railURLs=[];return;}
- container.append(rail);artRail=rail;railReady=true;moveArtRail(railOffset,false);
-}
-function moveArtRail(dx,animate){if(!artRail)return;const width=$('#lightbox').clientWidth;artRail.style.transition=animate?'transform 240ms cubic-bezier(.2,.75,.2,1)':'none';artRail.style.transform=`translate3d(${-width+dx}px,0,0)`;}
-function finishArtRail(dx,dy){
- if(!artRail||!railReady){destroyArtRail();if(Math.abs(dx)>55&&Math.abs(dx)>Math.abs(dy)*1.2)advanceArt(dx<0?1:-1);return;}
- const width=$('#lightbox').clientWidth,step=Math.abs(dx)>Math.max(55,width*.18)&&Math.abs(dx)>Math.abs(dy)*1.2?(dx<0?1:-1):0;
- railBusy=true;moveArtRail(step?-step*width:0,true);
- const rail=artRail;
- setTimeout(()=>{if(artRail!==rail)return;if(step)advanceArt(step);destroyArtRail();},250);
-}
 // Image gestures: pinch to zoom, drag while zoomed, swipe between artworks at 1x.
 let artScale=1,artX=0,artY=0,pinchStart=null,dragStart=null,lastArtTap=0;
 const largeArt=$('#largeArt');
@@ -242,9 +206,9 @@ $('#lightbox').addEventListener('touchstart',e=>{
  if(e.touches.length===2){
   const mid=touchMid(e.touches[0],e.touches[1]);
   pinchStart={distance:touchDistance(e.touches[0],e.touches[1]),scale:artScale,x:artX,y:artY,mid};
-  lightboxTouch=null;dragStart=null;destroyArtRail();
+  lightboxTouch=null;dragStart=null;
  }else if(e.touches.length===1){
-  const t=e.touches[0];lightboxTouch={x:t.clientX,y:t.clientY};if(artScale<=1.01&&!railBusy){railStartX=t.clientX;prepareArtRail();}
+  const t=e.touches[0];lightboxTouch={x:t.clientX,y:t.clientY};
   dragStart={x:t.clientX,y:t.clientY,offsetX:artX,offsetY:artY};
  }
 },{passive:true});
@@ -255,9 +219,6 @@ $('#lightbox').addEventListener('touchmove',e=>{
   artScale=Math.max(1,Math.min(5,pinchStart.scale*touchDistance(e.touches[0],e.touches[1])/Math.max(1,pinchStart.distance)));
   artX=pinchStart.x+mid.x-pinchStart.mid.x;artY=pinchStart.y+mid.y-pinchStart.mid.y;
   if(artScale===1){artX=0;artY=0;}renderArtZoom();
- }else if(e.touches.length===1&&artScale<=1.01&&lightboxTouch&&!railBusy){
-  const t=e.touches[0],dx=t.clientX-lightboxTouch.x,dy=t.clientY-lightboxTouch.y;
-  if(Math.abs(dx)>Math.abs(dy)&&Math.abs(dx)>5){e.preventDefault();railOffset=dx;moveArtRail(dx,false);}
  }else if(e.touches.length===1&&artScale>1.01&&dragStart){
   e.preventDefault();artX=dragStart.offsetX+e.touches[0].clientX-dragStart.x;artY=dragStart.offsetY+e.touches[0].clientY-dragStart.y;renderArtZoom();
  }
@@ -266,19 +227,17 @@ $('#lightbox').addEventListener('touchend',e=>{
  if(e.touches.length>0){if(e.touches.length===1){const t=e.touches[0];dragStart={x:t.clientX,y:t.clientY,offsetX:artX,offsetY:artY};}return;}
  if(!pinchStart&&artScale<=1.01&&lightboxTouch&&e.changedTouches.length===1){
   const dx=e.changedTouches[0].clientX-lightboxTouch.x,dy=e.changedTouches[0].clientY-lightboxTouch.y;
-  if(Math.abs(dx)>18&&Math.abs(dx)>Math.abs(dy)*1.2){finishArtRail(dx,dy);lastArtTap=0;}
-  else {destroyArtRail();
+  if(Math.abs(dx)>55&&Math.abs(dx)>Math.abs(dy)*1.2){advanceArt(dx<0?1:-1);lastArtTap=0;}
   else if(Math.abs(dx)<18&&Math.abs(dy)<18){
    const now=Date.now();if(now-lastArtTap<330){artScale=2.5;artX=0;artY=0;renderArtZoom();lastArtTap=0;}else lastArtTap=now;
-  }
   }
  }
  pinchStart=null;dragStart=null;lightboxTouch=null;
 },{passive:true});
-$('#lightbox').addEventListener('touchcancel',()=>{destroyArtRail();pinchStart=null;dragStart=null;lightboxTouch=null;});
+$('#lightbox').addEventListener('touchcancel',()=>{pinchStart=null;dragStart=null;lightboxTouch=null;});
 $('#lightbox').addEventListener('keydown',e=>{if(e.key==='ArrowLeft'){e.preventDefault();advanceArt(-1);}if(e.key==='ArrowRight'){e.preventDefault();advanceArt(1);}});
 $('#closeLightbox').onclick=()=>$('#lightbox').close();
-$('#lightbox').addEventListener('close',()=>{destroyArtRail();const target=lightboxDecade;lightboxSequence++;$('#largeArt').removeAttribute('src');if(lightboxURL)URL.revokeObjectURL(lightboxURL);lightboxURL=null;resetArtZoom();lastArtTap=0;if(tab==='mysteries'&&decade!==target){decade=target;manage=false;render();window.scrollTo(0,0);}syncWakeLock();});
+$('#lightbox').addEventListener('close',()=>{const target=lightboxDecade;lightboxSequence++;$('#largeArt').removeAttribute('src');if(lightboxURL)URL.revokeObjectURL(lightboxURL);lightboxURL=null;resetArtZoom();lastArtTap=0;if(tab==='mysteries'&&decade!==target){decade=target;manage=false;render();window.scrollTo(0,0);}syncWakeLock();});
 $('#lightbox').addEventListener('cancel',()=>{lightboxTouch=null;});
 $('#lightbox').addEventListener('click',e=>{if(e.target===$('#lightbox'))$('#lightbox').close();});
 function download(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);}
