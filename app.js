@@ -17,6 +17,8 @@ window.addEventListener('beforeunload',e=>{if(saveCount||unsaved){e.preventDefau
 function render(){
  renderToken++;if(artURL){URL.revokeObjectURL(artURL);artURL=null;}$('#main').setAttribute('aria-busy','false');
  $$('[data-tab]').forEach(b=>{if(b.dataset.tab===tab)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});
+ $('#main').hidden=tab==='appearance';$('#appearancePage').hidden=tab!=='appearance';
+ if(tab==='appearance'){window.dispatchEvent(new Event('rosary-appearance-open'));return;}
  if(tab==='calendar')renderCalendar();if(tab==='mysteries')renderMystery();if(tab==='prayers')renderPrayers();
 }
 function renderCalendar(){
