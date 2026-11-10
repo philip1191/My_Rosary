@@ -41,3 +41,16 @@
 
 /* Dedicated fourth tab: appearance page. */
 .appearance-page{padding:0 0 18px}.appearance-panel{max-width:760px;margin:0 auto}.appearance-fields{max-height:none;overflow:visible}.appearance-page[hidden],#main[hidden]{display:none!important}.appearance-page .dialog-actions{justify-content:flex-start}
+
+/* Allow vertical page scrolling over the logo preview unless repositioning is enabled. */
+.crop-viewport,.crop-viewport canvas{touch-action:pan-y}
+.crop-viewport.is-moving,.crop-viewport.is-moving canvas{touch-action:none}
+.crop-mode-actions{align-items:center;margin-bottom:12px}
+.crop-mode-actions .muted{flex:1}
+
+/* Theme the page surfaces as well as the outer background. */
+input:not([type=radio]),textarea,select{background:var(--input-bg,#fffefb)}
+.scripture{background:var(--scripture-bg,#eeeede);border-left-color:var(--line)}
+.assigned-prayer.dragging,.prayer-sortable.dragging{background:var(--light)}
+.manage-row{border-top-color:var(--line)}
+label.field{color:var(--ink)}
