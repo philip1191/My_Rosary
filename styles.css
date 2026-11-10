@@ -27,3 +27,10 @@
 .book-sections .rosaries-between .prayer-name{height:24px;font-size:11px;line-height:15px}
 .book-sections .rosaries-between .bead-count{height:13px;font-size:9px}
 @media(max-width:400px){.book-sections .rosaries-between{gap:7px}.book-sections .rosaries-between .rosary{padding:7px 5px}.book-sections .rosaries-between .bead{width:6px;height:6px}.book-sections .rosaries-between .bead.big{width:9px;height:9px}}
+
+/* Hide numeric bead progress and reclaim vertical space in both rosary cards. */
+.book-sections .rosaries-between .rosary{height:76px;padding:6px 10px;justify-content:center}
+.book-sections .rosaries-between .rosary-caption{height:15px}
+.book-sections .rosaries-between .beads{height:20px;min-height:20px}
+.book-sections .rosaries-between .prayer-name{height:22px}
+.book-sections .rosaries-between .bead-count{display:none}
