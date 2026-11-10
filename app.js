@@ -31,6 +31,9 @@ function track(task){const sequence=++saveSequence;saveCount++;notify('저장 �
 async function flush(){await pending;if(unsaved)throw new Error('저장하지 못한 내용이 있습니다. 현재 화면에서 다시 저장해 주세요.');}
 async function changeTab(next){await flush();tab=next;manage=false;render();syncWakeLock();}
 $$('[data-tab]').forEach(b=>b.onclick=action(()=>changeTab(b.dataset.tab)));
+$('#openHelp').addEventListener('click',()=>$('#helpDialog').showModal());
+$('#closeHelp').addEventListener('click',()=>$('#helpDialog').close());
+$('#helpDialog').addEventListener('click',e=>{if(e.target===$('#helpDialog'))$('#helpDialog').close();});
 window.addEventListener('beforeunload',e=>{if(saveCount||unsaved){e.preventDefault();e.returnValue='';}});
 function render(){
  renderToken++;if(artURL){URL.revokeObjectURL(artURL);artURL=null;}$('#main').setAttribute('aria-busy','false');
