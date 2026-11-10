@@ -54,3 +54,6 @@ input:not([type=radio]),textarea,select{background:var(--input-bg,#fffefb)}
 .assigned-prayer.dragging,.prayer-sortable.dragging{background:var(--light)}
 .manage-row{border-top-color:var(--line)}
 label.field{color:var(--ink)}
+
+/* User logo replaces the default cross. Override legacy important rule. */
+.brand .cross[style*="display: none"], .brand .cross[hidden]{display:none!important;}
