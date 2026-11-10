@@ -176,6 +176,7 @@ async function showLightboxArt(id){
   if(!asset?.blob)throw new Error('성화 파일을 읽지 못했습니다.');
   const url=URL.createObjectURL(asset.blob),old=lightboxURL;
   lightboxURL=url;lightboxDecade=id;
+  resetArtZoom();
   $('#largeArt').src=url;
   $('#largeArt').alt=`${MYSTERIES[Math.floor(id/5)].name} ${id%5+1}단 성화`;
   $('#lightboxPosition').textContent=`${MYSTERIES[Math.floor(id/5)].name} · ${id%5+1}단`;
@@ -184,12 +185,51 @@ async function showLightboxArt(id){
 }
 function findNextArt(id,step){for(let offset=1;offset<=20;offset++){const i=(id+step*offset+20*2)%20;if(state.decades[i]?.art)return i;}return null;}
 function advanceArt(step){const next=findNextArt(lightboxDecade,step);if(next!==null)showLightboxArt(next);}
-$('#lightbox').addEventListener('touchstart',e=>{if(e.touches.length===1)lightboxTouch={x:e.touches[0].clientX,y:e.touches[0].clientY};},{passive:true});
-$('#lightbox').addEventListener('touchend',e=>{if(!lightboxTouch||e.changedTouches.length!==1)return;const dx=e.changedTouches[0].clientX-lightboxTouch.x,dy=e.changedTouches[0].clientY-lightboxTouch.y;lightboxTouch=null;if(Math.abs(dx)>55&&Math.abs(dx)>Math.abs(dy)*1.2)advanceArt(dx<0?1:-1);},{passive:true});
+// Image gestures: pinch to zoom, drag while zoomed, swipe between artworks at 1x.
+let artScale=1,artX=0,artY=0,pinchStart=null,dragStart=null,lastArtTap=0;
+const largeArt=$('#largeArt');
+function renderArtZoom(){largeArt.style.transform=`translate(${artX}px, ${artY}px) scale(${artScale})`;largeArt.classList.toggle('zoomed',artScale>1.01);}
+function resetArtZoom(){artScale=1;artX=0;artY=0;pinchStart=null;dragStart=null;lightboxTouch=null;renderArtZoom();}
+function touchDistance(a,b){return Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);}
+function touchMid(a,b){return {x:(a.clientX+b.clientX)/2,y:(a.clientY+b.clientY)/2};}
+$('#lightbox').addEventListener('touchstart',e=>{
+ if(e.target.closest('button'))return;
+ if(e.touches.length===2){
+  const mid=touchMid(e.touches[0],e.touches[1]);
+  pinchStart={distance:touchDistance(e.touches[0],e.touches[1]),scale:artScale,x:artX,y:artY,mid};
+  lightboxTouch=null;dragStart=null;
+ }else if(e.touches.length===1){
+  const t=e.touches[0];lightboxTouch={x:t.clientX,y:t.clientY};
+  dragStart={x:t.clientX,y:t.clientY,offsetX:artX,offsetY:artY};
+ }
+},{passive:true});
+$('#lightbox').addEventListener('touchmove',e=>{
+ if(e.target.closest('button'))return;
+ if(e.touches.length===2&&pinchStart){
+  e.preventDefault();const mid=touchMid(e.touches[0],e.touches[1]);
+  artScale=Math.max(1,Math.min(5,pinchStart.scale*touchDistance(e.touches[0],e.touches[1])/Math.max(1,pinchStart.distance)));
+  artX=pinchStart.x+mid.x-pinchStart.mid.x;artY=pinchStart.y+mid.y-pinchStart.mid.y;
+  if(artScale===1){artX=0;artY=0;}renderArtZoom();
+ }else if(e.touches.length===1&&artScale>1.01&&dragStart){
+  e.preventDefault();artX=dragStart.offsetX+e.touches[0].clientX-dragStart.x;artY=dragStart.offsetY+e.touches[0].clientY-dragStart.y;renderArtZoom();
+ }
+},{passive:false});
+$('#lightbox').addEventListener('touchend',e=>{
+ if(e.touches.length>0){if(e.touches.length===1){const t=e.touches[0];dragStart={x:t.clientX,y:t.clientY,offsetX:artX,offsetY:artY};}return;}
+ if(!pinchStart&&artScale<=1.01&&lightboxTouch&&e.changedTouches.length===1){
+  const dx=e.changedTouches[0].clientX-lightboxTouch.x,dy=e.changedTouches[0].clientY-lightboxTouch.y;
+  if(Math.abs(dx)>55&&Math.abs(dx)>Math.abs(dy)*1.2){advanceArt(dx<0?1:-1);lastArtTap=0;}
+  else if(Math.abs(dx)<18&&Math.abs(dy)<18){
+   const now=Date.now();if(now-lastArtTap<330){artScale=2.5;artX=0;artY=0;renderArtZoom();lastArtTap=0;}else lastArtTap=now;
+  }
+ }
+ pinchStart=null;dragStart=null;lightboxTouch=null;
+},{passive:true});
+$('#lightbox').addEventListener('touchcancel',()=>{pinchStart=null;dragStart=null;lightboxTouch=null;});
 $('#lightbox').addEventListener('keydown',e=>{if(e.key==='ArrowLeft'){e.preventDefault();advanceArt(-1);}if(e.key==='ArrowRight'){e.preventDefault();advanceArt(1);}});
 $('#closeLightbox').onclick=()=>$('#lightbox').close();
 $('#lightbox').addEventListener('close',()=>{lightboxSequence++;$('#largeArt').removeAttribute('src');if(lightboxURL)URL.revokeObjectURL(lightboxURL);lightboxURL=null;syncWakeLock();});
-$('#lightbox').addEventListener('close',()=>{lightboxTouch=null;});
+$('#lightbox').addEventListener('close',()=>{resetArtZoom();lastArtTap=0;});
 $('#lightbox').addEventListener('cancel',()=>{lightboxTouch=null;});
 $('#lightbox').addEventListener('click',e=>{if(e.target===$('#lightbox'))$('#lightbox').close();});
 function download(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);}

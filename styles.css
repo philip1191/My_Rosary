@@ -84,3 +84,8 @@ footer{margin-top:28px}
 #lightbox .lightbox-position{position:absolute;top:21px;left:12px;right:95px;color:#fff;text-align:center;font-size:13px;pointer-events:none;}
 #lightbox{padding-bottom:44px;}
 #lightbox .lightbox-hint{position:absolute;bottom:13px;left:0;right:0;text-align:center;color:#c5cdc6;font-size:12px;pointer-events:none;}
+
+/* Gallery: pinch to zoom and drag without obscuring the artwork. */
+#lightbox{overflow:hidden;}
+#lightbox #largeArt{touch-action:none;transform-origin:center center;will-change:transform;user-select:none;-webkit-user-select:none;-webkit-user-drag:none;}
+#lightbox #largeArt.zoomed{cursor:grab;}
