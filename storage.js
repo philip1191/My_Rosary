@@ -18,7 +18,7 @@ export function validateState(s){
   check(object(r)&&Number.isSafeInteger(r.count)&&r.count>=0&&r.count<=999999&&str(r.intention)&&str(r.memo)&&(r.mystery===undefined||(Number.isInteger(r.mystery)&&r.mystery>=0&&r.mystery<4))&&(r.mysteries===undefined||(Array.isArray(r.mysteries)&&r.mysteries.length===4&&r.mysteries.every(n=>Number.isSafeInteger(n)&&n>=0&&n<=999999)&&r.mysteries.reduce((a,b)=>a+b,0)===r.count)),'달력 기록');
  }
  check(Object.keys(s.decades).length===20,'20단 구성');
- for(const id of DECADES){const d=s.decades[id];check(object(d)&&str(d.scripture)&&(d.scriptureTitle===undefined||str(d.scriptureTitle))&&(d.sectionOrder===undefined||(['art','prayers'].includes(d.sectionOrder)))&&Array.isArray(d.prayers)&&d.prayers.every(x=>ids.has(x))&&new Set(d.prayers).size===d.prayers.length&&(d.art===null||idOK(d.art)),'단별 데이터');}
+ for(const id of DECADES){const d=s.decades[id];check(object(d)&&str(d.scripture)&&(d.scriptureTitle===undefined||str(d.scriptureTitle))&&(d.scriptures===undefined||(Array.isArray(d.scriptures)&&d.scriptures.length<=500&&d.scriptures.every(x=>object(x)&&idOK(x.id)&&str(x.title)&&x.title.trim()&&str(x.body)&&x.body.trim())&&new Set(d.scriptures.map(x=>x.id)).size===d.scriptures.length))&&(d.sectionOrder===undefined||(['art','prayers'].includes(d.sectionOrder)))&&Array.isArray(d.prayers)&&d.prayers.every(x=>ids.has(x))&&new Set(d.prayers).size===d.prayers.length&&(d.art===null||idOK(d.art)),'단별 데이터');}
  return s;
 }
 export async function hashBlob(blob){return [...new Uint8Array(await crypto.subtle.digest('SHA-256',await blob.arrayBuffer()))].map(x=>x.toString(16).padStart(2,'0')).join('');}

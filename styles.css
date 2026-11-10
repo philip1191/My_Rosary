@@ -61,3 +61,6 @@ label.field{color:var(--ink)}
 /* Global user-selected font: headings, brand title, prayer text, controls and dialogs. */
 :root{--app-font:system-ui,-apple-system,'Noto Sans KR',sans-serif}
 html,body,button,input,textarea,select,option,summary,dialog,h1,h2,h3,h4,h5,h6,.serif,.scripture .prose,.footer-line,.cross{font-family:var(--app-font)!important}
+
+/* Multiple scripture entries, styled like prayer-library accordions. */
+.scripture-toolbar{display:flex;justify-content:flex-end;margin:10px 0 14px}.scripture-toolbar button{min-height:42px}.scripture-list{display:flex;flex-direction:column;gap:12px}.scripture-entry{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 18px;touch-action:pan-y}.scripture-entry .prayer-fold-title{font-size:16px;font-weight:600}.scripture-entry .actions{justify-content:flex-end;margin-top:12px}.scripture-entry .actions button{font-size:12px}.scripture-entry .prose{padding:8px 0 12px}.scripture-entry.dragging{background:var(--light);border:2px solid var(--gold);z-index:2;position:relative;touch-action:none}
