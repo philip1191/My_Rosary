@@ -17,3 +17,13 @@
 .prayer-sortable.dragging{background:#e8ece4;border:2px solid var(--gold);border-radius:9px;box-shadow:0 6px 18px #303a3215;position:relative;z-index:2}
 .prayer-card .actions{margin-top:12px}
 .prayer-library{display:flex;flex-direction:column;gap:12px}
+
+/* Compact, full-width horizontal virtual rosaries. */
+.book-sections .rosaries-between{display:flex;width:100%;justify-content:stretch;align-items:stretch;gap:10px;margin:0 0 4px}
+.book-sections .rosaries-between .rosary{flex:1 1 0;width:0;min-width:0;height:96px;padding:7px 10px;align-items:stretch}
+.book-sections .rosaries-between .rosary-caption{height:15px;font-size:10px;text-align:center}
+.book-sections .rosaries-between .beads{display:flex;flex-wrap:nowrap;justify-content:space-evenly;align-items:center;gap:2px;height:22px;min-height:22px}
+.book-sections .rosaries-between .bead{flex:0 0 auto}
+.book-sections .rosaries-between .prayer-name{height:24px;font-size:11px;line-height:15px}
+.book-sections .rosaries-between .bead-count{height:13px;font-size:9px}
+@media(max-width:400px){.book-sections .rosaries-between{gap:7px}.book-sections .rosaries-between .rosary{padding:7px 5px}.book-sections .rosaries-between .bead{width:6px;height:6px}.book-sections .rosaries-between .bead.big{width:9px;height:9px}}
