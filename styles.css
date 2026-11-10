@@ -70,3 +70,11 @@ html,body,button,input,textarea,select,option,summary,dialog,h1,h2,h3,h4,h5,h6,.
 .section-heading{margin-top:6px;margin-bottom:16px}
 footer{margin-top:28px}
 @media(max-width:700px){.masthead{padding-top:18px;padding-bottom:15px}.section-heading{margin-top:4px;margin-bottom:14px}footer{margin-top:24px}}
+
+/* Full-width stacked rosaries on the first decade; same dimensions on every decade. */
+.book-sections .rosaries-between{display:flex;flex-direction:column;align-items:stretch;gap:10px;width:100%;}
+.book-sections .rosaries-between .rosary{display:flex;flex:0 0 auto;width:100%;min-width:0;height:61px;padding:7px 12px;justify-content:center;gap:3px;}
+.book-sections .rosaries-between .rosary-caption{display:none;}
+.book-sections .rosaries-between .beads{height:20px;min-height:20px;width:100%;}
+.book-sections .rosaries-between .prayer-name{height:20px;min-height:20px;line-height:20px;}
+@media(max-width:400px){.book-sections .rosaries-between .rosary{padding:7px 12px;}}

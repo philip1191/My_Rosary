@@ -43,7 +43,7 @@ async function saveRecord(){
  const b=$(`[data-date="${date}"]`);if(b){b.querySelector('.mark').textContent=state.records[date]?(count?`${count}단`:'•'):'';b.setAttribute('aria-label',`${Number(date.slice(5,7))}월 ${Number(date.slice(8))}일, ${count}단 기록`);}
  const records=Object.entries(state.records).filter(([d])=>d.startsWith(`${month.getFullYear()}-${String(month.getMonth()+1).padStart(2,'0')}`));const metrics=$$('.calendar-foot strong');if(metrics.length){metrics[0].textContent=records.filter(([,r])=>r.count>0).length;metrics[1].textContent=records.reduce((n,[,r])=>n+r.count,0);}
 }
-function rosaryHTML(start){return `<button class="rosary" data-rosary="${start?'start':'decade'}" aria-label="${start?'시작 묵주':'일반 묵주'}"><span class="rosary-caption">${start?'시작 묵주':'이 단의 묵주'}</span><span class="beads"></span><span class="prayer-name"></span></button>`;}
+function rosaryHTML(start){return `<button class="rosary" data-rosary="${start?'start':'decade'}" aria-label="${start?'시작 묵주':'일반 묵주'}"><span class="beads"></span><span class="prayer-name"></span></button>`;}
 function bindRosaries(){
  $$('.rosary').forEach(b=>{const start=b.dataset.rosary==='start',names=start?START_PRAYERS:DECADE_PRAYERS;let index=0,down=null,suppress=false;
   const paint=()=>{b.querySelector('.beads').innerHTML=names.map((name,i)=>`<i class="bead ${name!=='성모송'?'big':''} ${start&&i===0?'cross-bead':''} ${i===index?'current':i<index?'done':''}">${start&&i===0?'✝︎':''}</i>`).join('');b.querySelector('.prayer-name').textContent=names[index];b.setAttribute('aria-label',`${start?'시작 묵주':'일반 묵주'} ${index+1}/${names.length} ${names[index]}. 좌우로 밀어 기도 이동`);};
