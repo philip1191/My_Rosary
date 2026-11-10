@@ -169,22 +169,28 @@ function editPrayer(id=null,attach=false){
 }
 async function showLightboxArt(id){
  const seq=++lightboxSequence,entry=state.decades[id];
+ const previous=lightboxURL;
+ // Every decade is navigable, including decades without an uploaded image.
+ lightboxDecade=id;
+ resetArtZoom();
+ $('#lightboxPosition').textContent=`${MYSTERIES[Math.floor(id/5)].name} · ${id%5+1}단`;
+ $('#largeArt').hidden=true;
+ $('#largeArt').removeAttribute('src');
+ $('#lightboxEmpty').hidden=!!entry?.art;
+ if(previous){URL.revokeObjectURL(previous);lightboxURL=null;}
  if(!entry?.art)return;
  try{
   const asset=await store.getAsset(entry.art);
   if(seq!==lightboxSequence||!$('#lightbox').open)return;
   if(!asset?.blob)throw new Error('성화 파일을 읽지 못했습니다.');
-  const url=URL.createObjectURL(asset.blob),old=lightboxURL;
-  lightboxURL=url;lightboxDecade=id;
-  resetArtZoom();
+  const url=URL.createObjectURL(asset.blob);
+  lightboxURL=url;
   $('#largeArt').src=url;
   $('#largeArt').alt=`${MYSTERIES[Math.floor(id/5)].name} ${id%5+1}단 성화`;
-  $('#lightboxPosition').textContent=`${MYSTERIES[Math.floor(id/5)].name} · ${id%5+1}단`;
-  if(old)URL.revokeObjectURL(old);
+  $('#largeArt').hidden=false;
  }catch(e){if(seq===lightboxSequence)error(e);}
 }
-function findNextArt(id,step){for(let offset=1;offset<=20;offset++){const i=(id+step*offset+20*2)%20;if(state.decades[i]?.art)return i;}return null;}
-function advanceArt(step){const next=findNextArt(lightboxDecade,step);if(next!==null)showLightboxArt(next);}
+function advanceArt(step){showLightboxArt((lightboxDecade+step+20)%20);}
 // Image gestures: pinch to zoom, drag while zoomed, swipe between artworks at 1x.
 let artScale=1,artX=0,artY=0,pinchStart=null,dragStart=null,lastArtTap=0;
 const largeArt=$('#largeArt');
@@ -228,8 +234,7 @@ $('#lightbox').addEventListener('touchend',e=>{
 $('#lightbox').addEventListener('touchcancel',()=>{pinchStart=null;dragStart=null;lightboxTouch=null;});
 $('#lightbox').addEventListener('keydown',e=>{if(e.key==='ArrowLeft'){e.preventDefault();advanceArt(-1);}if(e.key==='ArrowRight'){e.preventDefault();advanceArt(1);}});
 $('#closeLightbox').onclick=()=>$('#lightbox').close();
-$('#lightbox').addEventListener('close',()=>{lightboxSequence++;$('#largeArt').removeAttribute('src');if(lightboxURL)URL.revokeObjectURL(lightboxURL);lightboxURL=null;syncWakeLock();});
-$('#lightbox').addEventListener('close',()=>{resetArtZoom();lastArtTap=0;});
+$('#lightbox').addEventListener('close',()=>{const target=lightboxDecade;lightboxSequence++;$('#largeArt').removeAttribute('src');if(lightboxURL)URL.revokeObjectURL(lightboxURL);lightboxURL=null;resetArtZoom();lastArtTap=0;if(tab==='mysteries'&&decade!==target){decade=target;manage=false;render();window.scrollTo(0,0);}syncWakeLock();});
 $('#lightbox').addEventListener('cancel',()=>{lightboxTouch=null;});
 $('#lightbox').addEventListener('click',e=>{if(e.target===$('#lightbox'))$('#lightbox').close();});
 function download(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);}

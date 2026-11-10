@@ -89,3 +89,7 @@ footer{margin-top:28px}
 #lightbox{overflow:hidden;}
 #lightbox #largeArt{touch-action:none;transform-origin:center center;will-change:transform;user-select:none;-webkit-user-select:none;-webkit-user-drag:none;}
 #lightbox #largeArt.zoomed{cursor:grab;}
+
+/* Missing artwork remains a navigable slide in the 20-decade viewer. */
+#lightbox .lightbox-empty{position:absolute;inset:65px 18px 50px;display:flex;align-items:center;justify-content:center;color:#c5cdc6;font-size:14px;text-align:center;pointer-events:none;}
+#lightbox .lightbox-empty[hidden],#lightbox #largeArt[hidden]{display:none!important;}
