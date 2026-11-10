@@ -179,15 +179,11 @@ async function showLightboxArt(id){
   $('#largeArt').src=url;
   $('#largeArt').alt=`${MYSTERIES[Math.floor(id/5)].name} ${id%5+1}단 성화`;
   $('#lightboxPosition').textContent=`${MYSTERIES[Math.floor(id/5)].name} · ${id%5+1}단`;
-  $('#previousArt').disabled=findNextArt(id,-1)===null;
-  $('#nextArt').disabled=findNextArt(id,1)===null;
   if(old)URL.revokeObjectURL(old);
  }catch(e){if(seq===lightboxSequence)error(e);}
 }
 function findNextArt(id,step){for(let offset=1;offset<=20;offset++){const i=(id+step*offset+20*2)%20;if(state.decades[i]?.art)return i;}return null;}
 function advanceArt(step){const next=findNextArt(lightboxDecade,step);if(next!==null)showLightboxArt(next);}
-$('#previousArt').onclick=()=>advanceArt(-1);
-$('#nextArt').onclick=()=>advanceArt(1);
 $('#lightbox').addEventListener('touchstart',e=>{if(e.touches.length===1)lightboxTouch={x:e.touches[0].clientX,y:e.touches[0].clientY};},{passive:true});
 $('#lightbox').addEventListener('touchend',e=>{if(!lightboxTouch||e.changedTouches.length!==1)return;const dx=e.changedTouches[0].clientX-lightboxTouch.x,dy=e.changedTouches[0].clientY-lightboxTouch.y;lightboxTouch=null;if(Math.abs(dx)>55&&Math.abs(dx)>Math.abs(dy)*1.2)advanceArt(dx<0?1:-1);},{passive:true});
 $('#lightbox').addEventListener('keydown',e=>{if(e.key==='ArrowLeft'){e.preventDefault();advanceArt(-1);}if(e.key==='ArrowRight'){e.preventDefault();advanceArt(1);}});
