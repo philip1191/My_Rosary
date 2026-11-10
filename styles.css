@@ -64,3 +64,9 @@ html,body,button,input,textarea,select,option,summary,dialog,h1,h2,h3,h4,h5,h6,.
 
 /* Multiple scripture entries, styled like prayer-library accordions. */
 .scripture-toolbar{display:flex;justify-content:flex-end;margin:10px 0 14px}.scripture-toolbar button{min-height:42px}.scripture-list{display:flex;flex-direction:column;gap:12px}.scripture-entry{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 18px;touch-action:pan-y}.scripture-entry .prayer-fold-title{font-size:16px;font-weight:600}.scripture-entry .actions{justify-content:flex-end;margin-top:12px}.scripture-entry .actions button{font-size:12px}.scripture-entry .prose{padding:8px 0 12px}.scripture-entry.dragging{background:var(--light);border:2px solid var(--gold);z-index:2;position:relative;touch-action:none}
+
+/* Compact spacing after removal of decorative headings and footer slogan. */
+.masthead{padding-top:24px;padding-bottom:20px}
+.section-heading{margin-top:6px;margin-bottom:16px}
+footer{margin-top:28px}
+@media(max-width:700px){.masthead{padding-top:18px;padding-bottom:15px}.section-heading{margin-top:4px;margin-bottom:14px}footer{margin-top:24px}}
