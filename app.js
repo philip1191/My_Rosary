@@ -47,7 +47,7 @@ function rosaryHTML(start){return `<button class="rosary" data-rosary="${start?'
 function bindRosaries(){
  $$('.rosary').forEach(b=>{const start=b.dataset.rosary==='start',names=start?START_PRAYERS:DECADE_PRAYERS;let index=0,down=null,suppress=false;
   const paint=()=>{b.querySelector('.beads').innerHTML=names.map((name,i)=>`<i class="bead ${name!=='성모송'?'big':''} ${start&&i===0?'cross-bead':''} ${i===index?'current':i<index?'done':''}">${start&&i===0?'✝︎':''}</i>`).join('');b.querySelector('.prayer-name').textContent=names[index];b.setAttribute('aria-label',`${start?'시작 묵주':'일반 묵주'} ${index+1}/${names.length} ${names[index]}. 좌우로 밀어 기도 이동`);};
-  const step=n=>{index=Math.max(0,Math.min(names.length-1,index+n));paint();};
+  const step=n=>{const previous=index;index=Math.max(0,Math.min(names.length-1,index+n));paint();if(n>0&&previous<names.length-1&&index===names.length-1&&typeof navigator.vibrate==='function'){try{navigator.vibrate(80);}catch(_){/* Unsupported or blocked vibration must not interrupt prayer navigation. */}}};
   b.onpointerdown=e=>{down={y:e.clientY,x:e.clientX,id:e.pointerId};suppress=false;b.setPointerCapture(e.pointerId);};
   b.onpointerup=e=>{if(!down)return;const dy=e.clientY-down.y,dx=e.clientX-down.x;if(Math.abs(dx)>24&&Math.abs(dx)>=Math.abs(dy)){step(dx<0?1:-1);suppress=true;}down=null;};b.onpointercancel=()=>{down=null;suppress=true;};
   b.onclick=e=>e.preventDefault();b.onkeydown=e=>{if(['ArrowLeft','ArrowRight'].includes(e.key)){e.preventDefault();step(e.key==='ArrowLeft'?-1:1);}};paint();
