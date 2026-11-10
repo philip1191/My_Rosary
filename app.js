@@ -66,7 +66,8 @@ function renderMystery(){
 function chooseImage(){$('#imageInput').dataset.decade=String(decade);$('#imageInput').value='';$('#imageInput').click();}
 $('#imageInput').onchange=action(async e=>{const f=e.target.files[0];if(!f)return;const id=Number(e.target.dataset.decade);clearError();await track(store.saveArt(id,f));store.compact().catch(error);if(tab==='mysteries'&&decade===id)render();notify('성화 저장 · 파일 내용 및 표시 검증 완료');});
 async function loadArt(id,token){const a=await store.getAsset(id);if(!a?.blob)throw new Error('저장된 성화를 읽지 못했습니다. 백업 파일을 확인해 주세요.');if(token!==renderToken)return;artURL=URL.createObjectURL(a.blob);const img=document.createElement('img');img.alt=`${MYSTERIES[Math.floor(decade/5)].name} ${decade%5+1}단 성화`;img.src=artURL;img.onerror=()=>error(new Error('저장된 성화를 화면에 표시하지 못했습니다.'));$('#artDisplay').replaceChildren(img);}
-function renderAssigned(){const list=$('#assignedList');list.innerHTML=state.decades[decade].prayers.map(id=>{const p=state.prayers.find(p=>p.id===id);return `<article class="assigned-prayer" data-prayer="${id}" tabindex="0" aria-label="${esc(p.title)}. 길게 눌러 이동, 키보드 Alt와 방향키로 이동"><h3>${esc(p.title)}</h3><div class="prose">${esc(p.body)}</div></article>`;}).join('');bindDrag(list);}
+function prayerAccordion(p,assigned=false){return `<article class="${assigned?'assigned-prayer':'panel prayer-card'} prayer-sortable" data-prayer="${esc(p.id)}"><details class="prayer-fold"><summary class="prayer-fold-title">${esc(p.title)}<span class="fold-chevron" aria-hidden="true">⌄</span></summary><div class="prose">${esc(p.body)}</div></details>${assigned?'':`<div class="actions"><button data-edit-prayer="${esc(p.id)}">수정</button><button data-delete-prayer="${esc(p.id)}" class="danger quiet">삭제</button></div>`}</article>`;}
+function renderAssigned(){const list=$('#assignedList');list.innerHTML=state.decades[decade].prayers.map(id=>{const p=state.prayers.find(p=>p.id===id);return p?prayerAccordion(p,true):'';}).join('');bindDrag(list,'assigned');}
 function scopeHTML(){return '<fieldset style="border:0;padding:0;margin:0"><legend class="muted" style="font-size:11px;margin-top:12px">적용 범위</legend><div class="scope"><label><input type="radio" name="scope" value="all" checked> 전체 20단에 적용</label><label><input type="radio" name="scope" value="one"> 이 단에만 적용</label></div></fieldset>';}
 function assign(s,id,all,target){for(const [key,d] of Object.entries(s.decades))if(all||Number(key)===target)if(!d.prayers.includes(id))d.prayers.push(id);}
 function renderManage(){
@@ -75,27 +76,31 @@ function renderManage(){
  $('#newAssigned').onclick=()=>editPrayer(null,true);
  $$('[data-remove]').forEach(b=>b.onclick=action(async()=>{const id=b.dataset.remove,all=b.dataset.scope==='all',target=decade;if(all&&!confirm('전체 20단에서 이 기도문을 제거할까요? 원본은 기도문 탭에 남습니다.'))return;await track(store.mutate(s=>{for(const [key,d] of Object.entries(s.decades))if(all||Number(key)===target)d.prayers=d.prayers.filter(x=>x!==id);}));renderAssigned();renderManage();}));
 }
-function bindDrag(list){
- let timer=null,drag=null,start=null,raf=null,lastY=0;
+function bindDrag(list,mode='assigned'){
+ let timer=null,drag=null,start=null,raf=null,lastY=0,moved=false;
  const stopScroll=()=>{if(raf)cancelAnimationFrame(raf);raf=null;};
- const scroll=()=>{if(!drag)return;const margin=80;if(lastY<margin)window.scrollBy(0,-8);else if(lastY>innerHeight-margin)window.scrollBy(0,8);reorder(lastY);raf=requestAnimationFrame(scroll);};
- const begin=(row,y)=>{drag=row;lastY=y;row.classList.add('dragging');navigator.vibrate?.(20);notify('위아래로 옮긴 뒤 손을 떼세요');raf=requestAnimationFrame(scroll);};
  const reorder=y=>{if(!drag)return;const others=[...list.children].filter(x=>x!==drag);const next=others.find(x=>{const r=x.getBoundingClientRect();return y<r.top+r.height/2;});if(next)list.insertBefore(drag,next);else list.append(drag);};
- const finish=async(cancel=false)=>{clearTimeout(timer);timer=null;start=null;stopScroll();if(!drag)return;drag.classList.remove('dragging');drag=null;if(cancel){renderAssigned();notify('이동 취소');return;}const ids=[...list.children].map(x=>x.dataset.prayer),target=decade;try{await track(store.mutate(s=>{const current=s.decades[target].prayers;s.decades[target].prayers=[...ids.filter(id=>current.includes(id)),...current.filter(id=>!ids.includes(id))];}));}catch{renderAssigned();}};
+ const scroll=()=>{if(!drag)return;const margin=80;if(lastY<margin)window.scrollBy(0,-8);else if(lastY>innerHeight-margin)window.scrollBy(0,8);reorder(lastY);raf=requestAnimationFrame(scroll);};
+ const begin=(row,y)=>{drag=row;lastY=y;moved=true;row.classList.add('dragging');notify('위아래로 옮긴 뒤 손을 떼세요');raf=requestAnimationFrame(scroll);};
+ const finish=async(cancel=false)=>{clearTimeout(timer);timer=null;start=null;stopScroll();if(!drag)return;drag.classList.remove('dragging');drag=null;
+  if(cancel){if(mode==='assigned')renderAssigned();else renderPrayers();notify('이동 취소');return;}
+  const ids=[...list.children].map(x=>x.dataset.prayer),target=decade;
+  try{await track(store.mutate(s=>{if(mode==='library'){const byId=new Map(s.prayers.map(p=>[p.id,p]));s.prayers=ids.map(id=>byId.get(id)).filter(Boolean);}else{const current=s.decades[target].prayers;s.decades[target].prayers=[...ids.filter(id=>current.includes(id)),...current.filter(id=>!ids.includes(id))];}}));}catch{if(mode==='assigned')renderAssigned();else renderPrayers();}
+ };
  for(const row of list.children){
   row.addEventListener('contextmenu',e=>e.preventDefault());
-  row.addEventListener('touchstart',e=>{if(e.touches.length!==1)return;const t=e.touches[0];start={x:t.clientX,y:t.clientY};timer=setTimeout(()=>begin(row,t.clientY),450);},{passive:true});
+  row.addEventListener('click',e=>{if(moved){e.preventDefault();e.stopPropagation();moved=false;}},true);
+  row.addEventListener('touchstart',e=>{if(e.touches.length!==1||e.target.closest('.actions'))return;const t=e.touches[0];start={x:t.clientX,y:t.clientY};timer=setTimeout(()=>begin(row,t.clientY),500);},{passive:true});
   row.addEventListener('touchmove',e=>{if(e.touches.length!==1){finish(true);return;}const t=e.touches[0];if(drag){e.preventDefault();lastY=t.clientY;reorder(lastY);}else if(start&&Math.hypot(t.clientX-start.x,t.clientY-start.y)>9){clearTimeout(timer);timer=null;start=null;}},{passive:false});
-  row.addEventListener('touchend',()=>finish());row.addEventListener('touchcancel',()=>finish(true));
-  row.onpointerdown=e=>{if(e.pointerType==='touch'||e.button!==0)return;start={x:e.clientX,y:e.clientY};row.setPointerCapture(e.pointerId);timer=setTimeout(()=>begin(row,e.clientY),450);};
+  row.addEventListener('touchend',()=>{finish();});row.addEventListener('touchcancel',()=>finish(true));
+  row.onpointerdown=e=>{if(e.pointerType==='touch'||e.button!==0||e.target.closest('.actions'))return;start={x:e.clientX,y:e.clientY};timer=setTimeout(()=>begin(row,e.clientY),500);};
   row.onpointermove=e=>{if(e.pointerType==='touch')return;if(drag){lastY=e.clientY;reorder(lastY);}else if(start&&Math.hypot(e.clientX-start.x,e.clientY-start.y)>9){clearTimeout(timer);start=null;}};
   row.onpointerup=e=>{if(e.pointerType!=='touch')finish();};row.onpointercancel=e=>{if(e.pointerType!=='touch')finish(true);};
-  row.onkeydown=action(async e=>{if(!e.altKey||!['ArrowUp','ArrowDown'].includes(e.key))return;e.preventDefault();const next=e.key==='ArrowUp'?row.previousElementSibling:row.nextElementSibling;if(!next)return;if(e.key==='ArrowUp')list.insertBefore(row,next);else list.insertBefore(next,row);drag=row;await finish();row.focus();});
  }
 }
 function renderPrayers(){
- $('#main').innerHTML=`<div class="section-heading"><div><p class="kicker">나만의 기도 모음</p><h2>기도문</h2></div><button id="newPrayer" class="primary">＋ 기도문 추가</button></div><div class="prayer-library">${state.prayers.length?state.prayers.map(p=>`<article class="panel prayer-card"><h3>${esc(p.title)}</h3><div class="prose">${esc(p.body)}</div><div class="actions"><button data-edit-prayer="${p.id}">수정</button><button data-delete-prayer="${p.id}" class="danger quiet">삭제</button></div></article>`).join(''):'<div class="empty-state"><span class="empty-icon">✝︎</span><h3>나만의 기도를 담아 보세요</h3><p>직접 등록한 기도문이 여기에 모입니다.</p></div>'}</div>`;
- $('#newPrayer').onclick=()=>editPrayer();$$('[data-edit-prayer]').forEach(b=>b.onclick=()=>editPrayer(b.dataset.editPrayer));$$('[data-delete-prayer]').forEach(b=>b.onclick=action(async()=>{const id=b.dataset.deletePrayer;if(!confirm('기도문 원본을 삭제할까요? 배정된 모든 단에서도 제거됩니다.'))return;await track(store.mutate(s=>{s.prayers=s.prayers.filter(p=>p.id!==id);Object.values(s.decades).forEach(d=>d.prayers=d.prayers.filter(x=>x!==id));}));renderPrayers();}));
+ $('#main').innerHTML=`<div class="section-heading"><div><p class="kicker">나만의 기도 모음</p><h2>기도문</h2></div><button id="newPrayer" class="primary">＋ 기도문 추가</button></div><div class="prayer-library">${state.prayers.length?state.prayers.map(p=>prayerAccordion(p)).join(''):'<div class="empty-state"><span class="empty-icon">✝︎</span><h3>나만의 기도를 담아 보세요</h3><p>직접 등록한 기도문이 여기에 모입니다.</p></div>'}</div>`;
+ bindDrag($('.prayer-library'),'library');$('#newPrayer').onclick=()=>editPrayer();$$('[data-edit-prayer]').forEach(b=>b.onclick=()=>editPrayer(b.dataset.editPrayer));$$('[data-delete-prayer]').forEach(b=>b.onclick=action(async()=>{const id=b.dataset.deletePrayer;if(!confirm('기도문 원본을 삭제할까요? 배정된 모든 단에서도 제거됩니다.'))return;await track(store.mutate(s=>{s.prayers=s.prayers.filter(p=>p.id!==id);Object.values(s.decades).forEach(d=>d.prayers=d.prayers.filter(x=>x!==id));}));renderPrayers();}));
 }
 function openEditor(title,body,save){$('#editorTitle').textContent=title;$('#editorBody').innerHTML=body;editorAction=save;$('#editor').showModal();}
 function closeEditor(){if(!$('#saveEditor').disabled)$('#editor').close();}
