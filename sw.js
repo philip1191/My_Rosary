@@ -1,8 +1,8 @@
 /* Increment CACHE_VERSION for EVERY release, including CSS-only changes. */
-const CACHE_VERSION='rosary-book-shell-1.0.9-help-guide';
+const CACHE_VERSION='rosary-book-shell-1.1.1-music-header';
 const SCOPE=new URL(self.registration.scope).pathname;
 const CACHE=CACHE_VERSION+'@'+SCOPE;
-const FILES=['./','./index.html','./styles.css','./app.js','./settings.js','./storage.js','./mysteries.js','./manifest.webmanifest','./icons/icon-192.png','./icons/icon-512.png','./icons/maskable-512.png'];
+const FILES=['./','./index.html','./styles.css','./app.js','./music.js','./settings.js','./storage.js','./mysteries.js','./manifest.webmanifest','./icons/icon-192.png','./icons/icon-512.png','./icons/maskable-512.png'];
 const URLS=new Set(FILES.map(p=>new URL(p,self.registration.scope).href));
 self.addEventListener('install',e=>e.waitUntil((async()=>{const cache=await caches.open(CACHE);await cache.addAll(FILES.map(p=>new Request(new URL(p,self.registration.scope),{cache:'reload'})));})()));
 self.addEventListener('activate',e=>e.waitUntil((async()=>{const keys=await caches.keys();await Promise.all(keys.filter(k=>k.startsWith('rosary-book-shell-')&&k.endsWith('@'+SCOPE)&&k!==CACHE).map(k=>caches.delete(k)));await self.clients.claim();})()));
