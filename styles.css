@@ -174,3 +174,8 @@ footer{margin-top:28px}
 
 /* Swipe hint in the art controls row */
 .art-actions{align-items:center;flex-wrap:wrap}.art-swipe-hint{margin-right:auto;font-size:11px;color:var(--muted);line-height:1.5;max-width:55%}.art-display{touch-action:pan-y}
+
+/* Music attribution and credits button. */
+.credits-trigger{font-size:12px;font-weight:800;letter-spacing:-.04em}
+.credits-body{overflow-wrap:anywhere;line-height:1.7}
+.credits-body a{color:var(--green);overflow-wrap:anywhere}
