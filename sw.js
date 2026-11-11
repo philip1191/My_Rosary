@@ -1,5 +1,5 @@
 /* Increment CACHE_VERSION for EVERY release, including CSS-only changes. */
-const CACHE_VERSION='rosary-book-shell-1.1.2-art-viewer';
+const CACHE_VERSION='rosary-book-shell-1.1.3-fullscreen-art';
 const SCOPE=new URL(self.registration.scope).pathname;
 const CACHE=CACHE_VERSION+'@'+SCOPE;
 const FILES=['./','./index.html','./styles.css','./app.js','./music.js','./settings.js','./storage.js','./mysteries.js','./manifest.webmanifest','./icons/icon-192.png','./icons/icon-512.png','./icons/maskable-512.png'];
