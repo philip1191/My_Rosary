@@ -141,3 +141,12 @@ footer{margin-top:28px}
 #lightbox.controls-hidden .lightbox-close,#lightbox.controls-hidden .lightbox-position{opacity:0;visibility:hidden;pointer-events:none;}
 #lightbox .lightbox-close,#lightbox .lightbox-position{transition:opacity .15s ease,visibility .15s ease;}
 #lightbox .lightbox-empty{inset:0 18px;}
+
+/* Help guide typography: prominent headings, lightweight details */
+.help-body .help-intro{font-size:14px;line-height:1.8;color:var(--muted);font-weight:400;margin:0 0 18px}
+.help-body .help-section{margin:0 0 22px}
+.help-body .help-section h3{font-size:19px;font-weight:800;line-height:1.45;letter-spacing:-.035em;margin:0 0 10px;color:var(--ink)}
+.help-body .help-section p{font-size:14px;font-weight:400;line-height:1.85;margin:6px 0 10px;color:var(--ink)}
+.help-body .help-section p strong{font-weight:700}
+.help-body .help-section + .help-section{border-top:1px solid var(--line);padding-top:19px}
+@media(max-width:700px){.help-body .help-section h3{font-size:18px}.help-body .help-section p{font-size:13.5px}}
