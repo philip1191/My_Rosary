@@ -150,7 +150,3 @@ footer{margin-top:28px}
 .help-body .help-section p strong{font-weight:700}
 .help-body .help-section + .help-section{border-top:1px solid var(--line);padding-top:19px}
 @media(max-width:700px){.help-body .help-section h3{font-size:18px}.help-body .help-section p{font-size:13.5px}}
-
-/* Match the artwork viewer backdrop; system-bar rendering remains OS-controlled. */
-html.art-bars-black,html.art-bars-black body{background-color:#000000;}
-html.art-bars-black #lightbox{background-color:#000000;}
