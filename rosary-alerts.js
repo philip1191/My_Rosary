@@ -15,7 +15,7 @@ function playSound(){
 }
 export function notifyBeadChange(isGlory=false,isCross=false){
  // One pulse per moved bead. The final cross stays silent.
- if(!isCross&&typeof navigator.vibrate==='function'){try{navigator.vibrate(isGlory?200:30)}catch{}}
+ if(!isCross&&typeof navigator.vibrate==='function'){try{navigator.vibrate(isGlory?1000:30)}catch{}}
  if(isGlory&&prefs.sound)playSound();
 }
 function save(){try{localStorage.setItem(KEY,JSON.stringify(prefs))}catch{}}
