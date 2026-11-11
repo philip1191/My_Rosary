@@ -13,10 +13,12 @@ function playSound(){
   const result=player.play();if(result&&typeof result.catch==='function')result.catch(()=>{});
  }catch{/* Audio failure must not interrupt prayer navigation. */}
 }
-export function notifyBeadChange(isGlory=false,isCross=false){
- // One pulse per moved bead. The final cross stays silent.
- if(!isCross&&typeof navigator.vibrate==='function'){try{navigator.vibrate(isGlory?1000:30)}catch{}}
- if(isGlory&&prefs.sound)playSound();
+export function notifyBeadChange(isGlory=false,isCross=false,direction=1){
+ // Special feedback only when advancing ONTO a Glory bead.
+ // Backward moves and moves away from the last bead always give a short pulse.
+ const special=direction>0&&isGlory&&!isCross;
+ if(typeof navigator.vibrate==='function'){try{navigator.vibrate(special?1000:30)}catch{}}
+ if(special&&prefs.sound)playSound();
 }
 function save(){try{localStorage.setItem(KEY,JSON.stringify(prefs))}catch{}}
 function init(){

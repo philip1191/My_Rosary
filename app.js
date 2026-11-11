@@ -78,7 +78,7 @@ let pendingRosaryLanding=null;
 function bindRosaries(){
  $$('.rosary').forEach(b=>{const start=b.dataset.rosary==='start',finalDecade=b.dataset.finalDecade==='true',names=start?START_PRAYERS:(finalDecade?[...DECADE_PRAYERS,'(성모찬송)성호경']:DECADE_PRAYERS),gloryIndex=start?START_PRAYERS.length-1:DECADE_PRAYERS.length-1;let index=pendingRosaryLanding===(start?'start':'decade')?0:pendingRosaryLanding==='last'&&!start?names.length-1:0,down=null,suppress=false;
   const paint=()=>{b.querySelector('.beads').innerHTML=names.map((name,i)=>`<i class="bead ${name!=='성모송'?'big':''} ${(start&&i===0)||(finalDecade&&i===names.length-1)?'cross-bead':''} ${i===index?'current':i<index?'done':''}">${(start&&i===0)||(finalDecade&&i===names.length-1)?'✝︎':''}</i>`).join('');b.querySelector('.prayer-name').textContent=start&&index===0?'성호경 · 사도신경':names[index];b.setAttribute('aria-label',`${start?'시작 묵주':'일반 묵주'} ${index+1}/${names.length} ${names[index]}. 좌우로 밀어 기도 이동`);};
-  const step=n=>{if(index===0&&n<0){pendingRosaryLanding='last';moveDecade(decade-1).catch(error);return;}if(index===names.length-1&&n>0){if(!start){pendingRosaryLanding=decade%5===4?'start':'decade';moveDecade(decade+1).catch(error);}return;}const previous=index;index=Math.max(0,Math.min(names.length-1,index+n));paint();if(index!==previous)notifyBeadChange(index===gloryIndex,finalDecade&&index===names.length-1);};
+  const step=n=>{if(index===0&&n<0){notifyBeadChange(false,false,-1);pendingRosaryLanding='last';moveDecade(decade-1).catch(error);return;}if(index===names.length-1&&n>0){if(!start){notifyBeadChange(false,false,1);pendingRosaryLanding=decade%5===4?'start':'decade';moveDecade(decade+1).catch(error);}return;}const previous=index;index=Math.max(0,Math.min(names.length-1,index+n));paint();if(index!==previous)notifyBeadChange(index===gloryIndex,finalDecade&&index===names.length-1,n);};
   b.onpointerdown=e=>{down={y:e.clientY,x:e.clientX,id:e.pointerId};suppress=false;b.setPointerCapture(e.pointerId);};
   b.onpointerup=e=>{if(!down)return;const dy=e.clientY-down.y,dx=e.clientX-down.x;if(Math.abs(dx)>24&&Math.abs(dx)>=Math.abs(dy)){step(dx<0?1:-1);suppress=true;}down=null;};b.onpointercancel=()=>{down=null;suppress=true;};
   b.onclick=e=>e.preventDefault();b.onkeydown=e=>{if(['ArrowLeft','ArrowRight'].includes(e.key)){e.preventDefault();step(e.key==='ArrowLeft'?-1:1);}};paint();
@@ -227,11 +227,11 @@ function renderArtRosaries(){
 }
 function stepArtRosary(start,direction){
  const id=lightboxDecade,names=artRosaryNames(start,id),index=artRosaryIndex(start,id);
- if(direction>0&&index===names.length-1){if(!start){advanceArt(1);}return;}
- if(direction<0&&index===0){advanceArt(-1,'last');return;}
+ if(direction>0&&index===names.length-1){if(!start){notifyBeadChange(false,false,1);advanceArt(1);}return;}
+ if(direction<0&&index===0){notifyBeadChange(false,false,-1);advanceArt(-1,'last');return;}
  const next=index+(direction>0?1:-1);
  artRosaryProgress[`${id}:${start?'start':'decade'}`]=next;
- notifyBeadChange(next===(start?START_PRAYERS.length-1:DECADE_PRAYERS.length-1),!start&&id%5===4&&next===names.length-1);
+ notifyBeadChange(next===(start?START_PRAYERS.length-1:DECADE_PRAYERS.length-1),!start&&id%5===4&&next===names.length-1,direction);
  renderArtRosaries();
 }
 const artRosaryWrap=$('#artRosaries');
