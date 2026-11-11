@@ -92,7 +92,7 @@ function renderMystery(){
  artButton.addEventListener('pointerdown',e=>{if(e.isPrimary){artGesture={x:e.clientX,y:e.clientY};artSwiped=false;}});
  artButton.addEventListener('pointerup',e=>{if(!artGesture)return;const dx=e.clientX-artGesture.x,dy=e.clientY-artGesture.y;artGesture=null;if(Math.abs(dx)>45&&Math.abs(dx)>Math.abs(dy)*1.25){artSwiped=true;pendingRosaryLanding=null;moveDecade(decade+(dx<0?1:-1)).catch(error);}});
  artButton.addEventListener('pointercancel',()=>{artGesture=null;});
- artButton.onclick=()=>{if(artSwiped){artSwiped=false;return;}if(artURL){lightboxDecade=decade;$('#lightbox').classList.remove('controls-hidden');$('#lightbox').showModal();showLightboxArt(decade);syncWakeLock();}else if(!d.art)chooseImage();};
+ artButton.onclick=()=>{if(artSwiped){artSwiped=false;return;}if(artURL){lightboxDecade=decade;$('#lightbox').classList.remove('controls-hidden');$('#lightbox').showModal();setArtSystemBarTheme(true);showLightboxArt(decade);syncWakeLock();}else if(!d.art)chooseImage();};
  if(d.art){loadArt(d.art,renderToken).catch(error);$('#deleteArt').onclick=action(async()=>{if(confirm('이 단의 성화를 삭제할까요?')){const id=decade;await track(store.mutate(s=>{s.decades[id].art=null;}));render();}});}
  $('#toggleScripture').onclick=()=>{const area=$('#scriptureContents');area.hidden=!area.hidden;$('#toggleScripture').setAttribute('aria-expanded',String(!area.hidden));};
  renderScriptures();
@@ -206,6 +206,20 @@ async function showLightboxArt(id){
   $('#largeArt').hidden=false;
  }catch(e){if(seq===lightboxSequence)error(e);}
 }
+// Ask supported browsers to use a dark system bar while artwork is enlarged.
+// Restore the current app theme on closing; unsupported browsers keep their own bars.
+let artPreviousThemeColor=null;
+function setArtSystemBarTheme(open){
+ const meta=document.querySelector('meta[name="theme-color"]');
+ if(!meta)return;
+ if(open){
+  if(artPreviousThemeColor===null)artPreviousThemeColor=meta.getAttribute('content')||'#f8f5ee';
+  meta.setAttribute('content','#000000');
+ }else if(artPreviousThemeColor!==null){
+  meta.setAttribute('content',artPreviousThemeColor);
+  artPreviousThemeColor=null;
+ }
+}
 function advanceArt(step){showLightboxArt((lightboxDecade+step+20)%20);}
 // Image gestures: pinch to zoom, drag while zoomed, swipe between artworks at 1x.
 let artScale=1,artX=0,artY=0,pinchStart=null,dragStart=null,lastArtTap=0;
@@ -257,7 +271,7 @@ $('#lightbox').addEventListener('touchend',e=>{
 $('#lightbox').addEventListener('touchcancel',()=>{pinchStart=null;dragStart=null;lightboxTouch=null;touchWasMulti=false;cancelArtTap();});
 $('#lightbox').addEventListener('keydown',e=>{if(e.key==='ArrowLeft'){e.preventDefault();advanceArt(-1);}if(e.key==='ArrowRight'){e.preventDefault();advanceArt(1);}});
 $('#closeLightbox').onclick=()=>$('#lightbox').close();
-$('#lightbox').addEventListener('close',()=>{const target=lightboxDecade;lightboxSequence++;$('#largeArt').removeAttribute('src');if(lightboxURL)URL.revokeObjectURL(lightboxURL);lightboxURL=null;resetArtZoom();cancelArtTap();lastArtTap=0;$('#lightbox').classList.remove('controls-hidden');if(tab==='mysteries'&&decade!==target){decade=target;manage=false;render();window.scrollTo(0,0);}syncWakeLock();});
+$('#lightbox').addEventListener('close',()=>{setArtSystemBarTheme(false);const target=lightboxDecade;lightboxSequence++;$('#largeArt').removeAttribute('src');if(lightboxURL)URL.revokeObjectURL(lightboxURL);lightboxURL=null;resetArtZoom();cancelArtTap();lastArtTap=0;$('#lightbox').classList.remove('controls-hidden');if(tab==='mysteries'&&decade!==target){decade=target;manage=false;render();window.scrollTo(0,0);}syncWakeLock();});
 $('#lightbox').addEventListener('cancel',()=>{lightboxTouch=null;});
 $('#lightbox').addEventListener('click',e=>{if(e.target.closest('button'))return;if(Date.now()<ignoreMouseClickUntil)return;registerArtTap();});
 function download(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);}
