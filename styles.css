@@ -163,3 +163,8 @@ footer{margin-top:28px}
 .masthead .brand-copy h1{transform:none}
 .masthead .lifetime-prayer-total{display:block;font-size:12px;font-weight:400;line-height:1.4;color:var(--muted);letter-spacing:0}
 
+
+/* User-selectable logo outline; keep the original stored image unchanged. */
+.brand.logo-circle .brand-logo{border-radius:50%;}
+.logo-shape-options{display:flex;gap:8px;flex-wrap:wrap;}
+.logo-shape-options button[aria-pressed="true"]{background:var(--green);color:var(--accent-ink);border-color:var(--green);font-weight:700;}
