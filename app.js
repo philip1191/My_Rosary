@@ -24,11 +24,15 @@ async function syncWakeLock(){
 }
 document.addEventListener('visibilitychange',()=>{syncWakeLock();});
 let pending=Promise.resolve(),unsaved=false,saveCount=0,saveSequence=0,editorAction=null,waitingWorker=null,installEvent=null;
+function updateLifetimePrayerTotal(){
+ const total=Object.values(state.records).reduce((sum,r)=>sum+(Number.isSafeInteger(r?.count)?r.count:0),0);
+ const label=$('#lifetimePrayerTotal');if(label)label.textContent=`누적 기도: ${total.toLocaleString('ko-KR')}단`;
+}
 const notify=s=>{$('#status').textContent=s;};
 function error(e){$('#error').textContent=explainError(e);$('#error').hidden=false;notify('저장되지 않은 내용이 있는지 확인해 주세요');}
 function clearError(){$('#error').hidden=true;}
 function action(fn){return async e=>{try{await fn(e);}catch(err){error(err);}};}
-function track(task){const sequence=++saveSequence;saveCount++;notify('저장 중…');const p=task.then(s=>{if(s)state=s;if(sequence===saveSequence){unsaved=false;notify('저장 · 다시 읽기 확인 완료');}return s;}).catch(e=>{if(sequence===saveSequence)unsaved=true;error(e);throw e;}).finally(()=>{saveCount--;});pending=p;return p;}
+function track(task){const sequence=++saveSequence;saveCount++;notify('저장 중…');const p=task.then(s=>{if(s){state=s;updateLifetimePrayerTotal();}if(sequence===saveSequence){unsaved=false;notify('저장 · 다시 읽기 확인 완료');}return s;}).catch(e=>{if(sequence===saveSequence)unsaved=true;error(e);throw e;}).finally(()=>{saveCount--;});pending=p;return p;}
 async function flush(){await pending;if(unsaved)throw new Error('저장하지 못한 내용이 있습니다. 현재 화면에서 다시 저장해 주세요.');}
 async function changeTab(next){await flush();tab=next;manage=false;render();syncWakeLock();}
 $$('[data-tab]').forEach(b=>b.onclick=action(()=>changeTab(b.dataset.tab)));
@@ -37,6 +41,7 @@ $('#closeHelp').addEventListener('click',()=>$('#helpDialog').close());
 $('#helpDialog').addEventListener('click',e=>{if(e.target===$('#helpDialog'))$('#helpDialog').close();});
 window.addEventListener('beforeunload',e=>{if(saveCount||unsaved){e.preventDefault();e.returnValue='';}});
 function render(){
+ updateLifetimePrayerTotal();
  renderToken++;if(artURL){URL.revokeObjectURL(artURL);artURL=null;}$('#main').setAttribute('aria-busy','false');
  $$('[data-tab]').forEach(b=>{if(b.dataset.tab===tab)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});
  $('#main').hidden=tab==='appearance';$('#appearancePage').hidden=tab!=='appearance';

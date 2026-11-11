@@ -158,5 +158,8 @@ footer{margin-top:28px}
 .rosary-alert-choice input[type=checkbox]{width:20px;height:20px;flex:0 0 20px;accent-color:var(--green)}
 .rosary-alert-settings .field{font-size:13px}
 
-/* Visually lower only the app title; keep logo and header controls unchanged. */
-.masthead .brand h1{transform:translateY(12px)}
+/* Brand title and lifetime prayer count: center the two-line block beside the logo. */
+.masthead .brand-copy{display:flex;flex-direction:column;justify-content:center;gap:5px;min-width:0}
+.masthead .brand-copy h1{transform:none}
+.masthead .lifetime-prayer-total{display:block;font-size:12px;font-weight:400;line-height:1.4;color:var(--muted);letter-spacing:0}
+
