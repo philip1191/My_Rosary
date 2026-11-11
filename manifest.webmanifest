@@ -1,5 +1,31 @@
 {
-  "id":"./", "name":"My Rosary", "short_name":"My Rosary", "description":"나만의 성화와 말씀, 기도 기록",
-  "lang":"ko", "start_url":"./", "scope":"./", "display":"standalone", "background_color":"#f8f5ee", "theme_color":"#f8f5ee",
-  "icons":[{"src":"./icons/icon-192.png","sizes":"192x192","type":"image/png","purpose":"any"},{"src":"./icons/icon-512.png","sizes":"512x512","type":"image/png","purpose":"any"},{"src":"./icons/maskable-512.png","sizes":"512x512","type":"image/png","purpose":"maskable"}]
+  "id": "./",
+  "name": "My Rosary",
+  "short_name": "My Rosary",
+  "description": "나만의 성화와 말씀, 기도 기록",
+  "lang": "ko",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f8f5ee",
+  "icons": [
+    {
+      "src": "./icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
 }
