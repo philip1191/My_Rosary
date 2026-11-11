@@ -220,7 +220,8 @@ function renderArtRosaries(){
  wrap.querySelectorAll('[data-art-rosary]').forEach(b=>{
   const start=b.dataset.artRosary==='start',names=artRosaryNames(start,lightboxDecade),i=artRosaryIndex(start,lightboxDecade),cross=(start&&i===0)||(!start&&lightboxDecade%5===4&&i===names.length-1);
   const name=start&&i===0?'성호경 · 사도신경':names[i];
-  b.innerHTML=`<span class="art-rosary-arrow" aria-hidden="true">↑</span><span class="art-rosary-symbol ${cross?'art-rosary-cross':names[i]==='성모송'?'art-rosary-small':'art-rosary-large'}" aria-hidden="true">${cross?'✝':''}</span><span class="art-rosary-prayer">${name}</span>`;
+  const hailMaryNumber=names[i]==='성모송'?(start?i-1:i):null;
+  b.innerHTML=`<span class="art-rosary-arrow" aria-hidden="true">↑</span><span class="art-rosary-symbol ${cross?'art-rosary-cross':names[i]==='성모송'?'art-rosary-small':'art-rosary-large'}" aria-hidden="true">${cross?'✝':hailMaryNumber??''}</span><span class="art-rosary-prayer">${name}</span>`;
   b.setAttribute('aria-label',`${name}, ${i+1}/${names.length}. 위아래로 밀어 이동`);
  });
 }
