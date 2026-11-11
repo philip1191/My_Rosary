@@ -7,6 +7,11 @@ const localDate=(d=new Date())=>`${d.getFullYear()}-${String(d.getMonth()+1).pad
 const store=new PrayerStore();let state=blankState(),tab='calendar',selected=localDate(),month=new Date(new Date().getFullYear(),new Date().getMonth(),1),decade=0,artURL=null,renderToken=0,manage=false;
 // Wake lock is transient and never stored in the prayer database.
 let wakeLock=null,wakeRequest=0,lightboxDecade=0,lightboxURL=null,lightboxSequence=0,lightboxTouch=null;
+// Per-decade artwork rosary progress is separate from the calendar's prayer counts.
+const ART_ROSARY_KEY='my-rosary-art-beads-v1';
+let artRosaryProgress={};
+try{const saved=JSON.parse(localStorage.getItem(ART_ROSARY_KEY)||'{}');if(saved&&typeof saved==='object'&&!Array.isArray(saved))artRosaryProgress=saved;}catch(_){}
+function saveArtRosaryProgress(){try{localStorage.setItem(ART_ROSARY_KEY,JSON.stringify(artRosaryProgress));}catch(_){}}
 function wantsWakeLock(){return document.visibilityState==='visible'&&(tab==='mysteries'||tab==='prayers'||$('#lightbox')?.open);}
 async function syncWakeLock(){
  const request=++wakeRequest;
@@ -188,6 +193,7 @@ async function showLightboxArt(id){
  const previous=lightboxURL;
  // Every decade is navigable, including decades without an uploaded image.
  lightboxDecade=id;
+ renderArtRosaries();
  resetArtZoom();
  $('#lightboxPosition').textContent=`${MYSTERIES[Math.floor(id/5)].name} · ${id%5+1}단`;
  $('#largeArt').hidden=true;
@@ -208,6 +214,36 @@ async function showLightboxArt(id){
 }
 // Ask supported browsers to use a dark system bar while artwork is enlarged.
 // Restore the current app theme on closing; unsupported browsers keep their own bars.
+function artRosaryNames(start,id){return start?START_PRAYERS:(id%5===4?[...DECADE_PRAYERS,'성호경(성모찬송)']:DECADE_PRAYERS);}
+function artRosaryIndex(start,id){const key=`${id}:${start?'start':'decade'}`,n=Number(artRosaryProgress[key]);return Number.isInteger(n)?Math.max(0,Math.min(artRosaryNames(start,id).length-1,n)):0;}
+function renderArtRosaries(){
+ const wrap=$('#artRosaries');if(!wrap)return;
+ wrap.innerHTML=(lightboxDecade%5===0?'<button type="button" class="art-rosary-bead" data-art-rosary="start" aria-label="시작 기도 구슬"></button>':'')+'<button type="button" class="art-rosary-bead" data-art-rosary="decade" aria-label="단 기도 구슬"></button>';
+ wrap.querySelectorAll('[data-art-rosary]').forEach(b=>{
+  const start=b.dataset.artRosary==='start',names=artRosaryNames(start,lightboxDecade),i=artRosaryIndex(start,lightboxDecade),cross=(start&&i===0)||(!start&&lightboxDecade%5===4&&i===names.length-1);
+  const name=start&&i===0?'성호경 · 사도신경':names[i];
+  b.innerHTML=`<span class="art-rosary-arrow" aria-hidden="true">↑</span><span class="art-rosary-symbol ${cross?'art-rosary-cross':names[i]==='성모송'?'art-rosary-small':'art-rosary-large'}" aria-hidden="true">${cross?'✝':''}</span><span class="art-rosary-prayer">${name}</span><span class="art-rosary-count">${i+1} / ${names.length}</span>`;
+  b.setAttribute('aria-label',`${name}, ${i+1}/${names.length}. 위아래로 밀어 이동`);
+ });
+}
+function stepArtRosary(start,direction){
+ const id=lightboxDecade,names=artRosaryNames(start,id),index=artRosaryIndex(start,id);
+ if(direction>0&&index===names.length-1){if(!start){advanceArt(1);}return;}
+ if(direction<0&&index===0){if(!start){const prev=(id+19)%20;artRosaryProgress[`${prev}:decade`]=artRosaryNames(false,prev).length-1;saveArtRosaryProgress();advanceArt(-1);}return;}
+ const next=index+(direction>0?1:-1);
+ artRosaryProgress[`${id}:${start?'start':'decade'}`]=next;
+ saveArtRosaryProgress();
+ notifyBeadChange(next===(start?START_PRAYERS.length-1:DECADE_PRAYERS.length-1),!start&&id%5===4&&next===names.length-1);
+ renderArtRosaries();
+}
+const artRosaryWrap=$('#artRosaries');
+let artBeadTouch=null;
+artRosaryWrap.addEventListener('touchstart',e=>{const b=e.target.closest('[data-art-rosary]');if(!b||e.touches.length!==1)return;artBeadTouch={id:b.dataset.artRosary,y:e.touches[0].clientY,x:e.touches[0].clientX};e.stopPropagation();},{passive:true});
+artRosaryWrap.addEventListener('touchmove',e=>{if(artBeadTouch){e.preventDefault();e.stopPropagation();}},{passive:false});
+artRosaryWrap.addEventListener('touchend',e=>{if(!artBeadTouch)return;const t=e.changedTouches[0],dy=t.clientY-artBeadTouch.y,dx=t.clientX-artBeadTouch.x;if(Math.abs(dy)>24&&Math.abs(dy)>Math.abs(dx)){stepArtRosary(artBeadTouch.id==='start',dy<0?1:-1);}artBeadTouch=null;ignoreMouseClickUntil=Date.now()+650;e.stopPropagation();},{passive:false});
+artRosaryWrap.addEventListener('touchcancel',e=>{artBeadTouch=null;e.stopPropagation();});
+artRosaryWrap.addEventListener('click',e=>{e.stopPropagation();});
+artRosaryWrap.addEventListener('keydown',e=>{const b=e.target.closest('[data-art-rosary]');if(!b)return;if(e.key==='ArrowUp'||e.key==='ArrowDown'){e.preventDefault();stepArtRosary(b.dataset.artRosary==='start',e.key==='ArrowUp'?1:-1);}});
 function advanceArt(step){showLightboxArt((lightboxDecade+step+20)%20);}
 // Image gestures: pinch to zoom, drag while zoomed, swipe between artworks at 1x.
 let artScale=1,artX=0,artY=0,pinchStart=null,dragStart=null,lastArtTap=0;
@@ -259,7 +295,7 @@ $('#lightbox').addEventListener('touchend',e=>{
 $('#lightbox').addEventListener('touchcancel',()=>{pinchStart=null;dragStart=null;lightboxTouch=null;touchWasMulti=false;cancelArtTap();});
 $('#lightbox').addEventListener('keydown',e=>{if(e.key==='ArrowLeft'){e.preventDefault();advanceArt(-1);}if(e.key==='ArrowRight'){e.preventDefault();advanceArt(1);}});
 $('#closeLightbox').onclick=()=>$('#lightbox').close();
-$('#lightbox').addEventListener('close',()=>{const target=lightboxDecade;lightboxSequence++;$('#largeArt').removeAttribute('src');if(lightboxURL)URL.revokeObjectURL(lightboxURL);lightboxURL=null;resetArtZoom();cancelArtTap();lastArtTap=0;$('#lightbox').classList.remove('controls-hidden');if(tab==='mysteries'&&decade!==target){decade=target;manage=false;render();window.scrollTo(0,0);}syncWakeLock();});
+$('#lightbox').addEventListener('close',()=>{const target=lightboxDecade;lightboxSequence++;$('#largeArt').removeAttribute('src');if(lightboxURL)URL.revokeObjectURL(lightboxURL);lightboxURL=null;resetArtZoom();cancelArtTap();lastArtTap=0;$('#lightbox').classList.remove('controls-hidden');artBeadTouch=null;if(tab==='mysteries'&&decade!==target){decade=target;manage=false;render();window.scrollTo(0,0);}syncWakeLock();});
 $('#lightbox').addEventListener('cancel',()=>{lightboxTouch=null;});
 $('#lightbox').addEventListener('click',e=>{if(e.target.closest('button'))return;if(Date.now()<ignoreMouseClickUntil)return;registerArtTap();});
 function download(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);}
