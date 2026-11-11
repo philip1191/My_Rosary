@@ -76,6 +76,21 @@
 <dialog id="lightbox"><button id="closeLightbox" class="lightbox-close" aria-label="성화 닫기" title="닫기">×</button><div id="lightboxPosition" class="lightbox-position" aria-live="polite"></div><img alt="확대된 성화" id="largeArt"><div id="lightboxEmpty" class="lightbox-empty" hidden>등록된 성화가 없습니다</div><div id="artRosaries" class="art-rosaries" aria-label="성화 화면 가상 묵주"></div></dialog>
 <input type="file" id="imageInput" accept="image/jpeg,image/png,image/webp" hidden><input type="file" id="backupInput" accept=".json,application/json" hidden>
 <noscript>이 앱을 사용하려면 JavaScript를 켜 주세요.</noscript>
+<script>
+// Show startup script errors instead of leaving the app at '저장소를 여는 중…'.
+(function(){
+ let loaded=false;
+ window.addEventListener('rosary-app-ready',()=>{loaded=true;});
+ function show(message){
+  if(loaded)return;
+  const box=document.getElementById('error');
+  if(box){box.textContent='앱 시작 오류: '+message+' · 사이트 데이터를 삭제하지 마세요.';box.hidden=false;}
+ }
+ window.addEventListener('error',e=>{if(e.filename||e.message)show(e.message||'스크립트 불러오기 실패');});
+ window.addEventListener('unhandledrejection',e=>show(e.reason?.message||'스크립트 실행 실패'));
+ setTimeout(()=>{if(!loaded&&document.getElementById('status')?.textContent==='저장소를 여는 중…')show('앱 실행이 지연되고 있습니다. 업데이트 확인 후 다시 시도해 주세요.');},12000);
+})();
+</script>
 <script type="module" src="./settings.js"></script>
 <script type="module" src="./app.js"></script>
 <script type="module" src="./music.js"></script>

@@ -315,15 +315,75 @@ $('#persist').onclick=action(async()=>{const p=await navigator.storage?.persist?
 $('#dataTools').addEventListener('toggle',()=>{if($('#dataTools').open)storageInfo().catch(error);});
 function connection(){$('#connection').textContent=navigator.onLine?'기기 안에 보관':'오프라인';}addEventListener('online',connection);addEventListener('offline',connection);connection();
 let registration;
-async function setupPWA(){if(!('serviceWorker' in navigator))return;registration=await navigator.serviceWorker.getRegistration('./');if(!registration||registration.scope!==new URL('./',location.href).href)registration=await navigator.serviceWorker.register('./sw.js',{updateViaCache:'none'});
- const show=w=>{waitingWorker=w;$('#update').hidden=false;};if(registration.waiting)show(registration.waiting);
- registration.addEventListener('updatefound',()=>{const w=registration.installing;w.addEventListener('statechange',()=>{if(w.state==='installed'&&navigator.serviceWorker.controller)show(w);});});
- if(navigator.onLine)registration.update().catch(()=>{});
+let updateCheckInProgress=false;
+function offerUpdate(worker){
+ if(!worker||worker.state!=='installed'||!navigator.serviceWorker.controller)return;
+ waitingWorker=worker;
+ $('#update').hidden=false;
+ notify('새 버전이 준비되었습니다. 업데이트 적용을 눌러 주세요.');
 }
-$('#applyUpdate').onclick=action(async()=>{await flush();if($('#editor').open)throw new Error('열려 있는 입력창을 저장하거나 닫은 뒤 업데이트해 주세요.');if(waitingWorker)waitingWorker.postMessage({type:'SKIP_WAITING'});});
-let reloading=false;navigator.serviceWorker?.addEventListener('controllerchange',()=>{if(waitingWorker&&!reloading){reloading=true;location.reload();}});
-$('#checkUpdate').onclick=action(async()=>{if(!navigator.onLine)throw new Error('업데이트 확인에는 인터넷 연결이 필요합니다.');if(!registration)await setupPWA();await registration?.update();notify(registration?.waiting?'새 버전이 준비되었습니다':'업데이트 확인을 요청했습니다');});
+function observeInstalling(worker){
+ if(!worker)return;
+ const check=()=>{if(worker.state==='installed')offerUpdate(worker);};
+ worker.addEventListener('statechange',check);
+ check();
+}
+async function checkPWAUpdate(manual=false){
+ if(!('serviceWorker' in navigator)){
+  if(manual)notify('이 브라우저는 오프라인 업데이트를 지원하지 않습니다.');
+  return;
+ }
+ if(!navigator.onLine){if(manual)notify('오프라인입니다. 인터넷 연결 후 다시 확인해 주세요.');return;}
+ if(updateCheckInProgress)return;
+ updateCheckInProgress=true;
+ if(manual)notify('새 버전을 확인하는 중…');
+ try{
+  // Registration.update() fetches sw.js; updateViaCache:none bypasses HTTP cache
+  // for imported worker scripts as well. No site data is deleted.
+  await registration.update();
+  if(registration.waiting)offerUpdate(registration.waiting);
+  else if(registration.installing){observeInstalling(registration.installing);if(manual)notify('새 버전 파일을 준비하는 중입니다. 완료되면 업데이트 버튼이 표시됩니다.');}
+  else if(manual)notify('업데이트 확인 완료 · 새 버전이 없거나 이미 적용되었습니다.');
+ }catch(e){if(manual)throw e;}
+ finally{updateCheckInProgress=false;}
+}
+async function setupPWA(){
+ if(!('serviceWorker' in navigator))return;
+ // Re-register even if one already exists, so older registrations use the
+ // same no-HTTP-cache policy for future worker updates.
+ registration=await navigator.serviceWorker.register('./sw.js',{scope:'./',updateViaCache:'none'});
+ if(registration.waiting)offerUpdate(registration.waiting);
+ observeInstalling(registration.installing);
+ registration.addEventListener('updatefound',()=>observeInstalling(registration.installing));
+ await checkPWAUpdate(false);
+}
+$('#applyUpdate').onclick=action(async()=>{
+ await flush();
+ if($('#editor').open)throw new Error('입력창을 저장하거나 닫은 뒤 업데이트해 주세요.');
+ if(!waitingWorker){notify('준비된 업데이트가 없습니다. 업데이트 확인을 다시 눌러 주세요.');return;}
+ $('#applyUpdate').disabled=true;
+ notify('업데이트를 적용하는 중…');
+ waitingWorker.postMessage({type:'SKIP_WAITING'});
+ // If activation stalls, allow the user to retry rather than locking the UI.
+ setTimeout(()=>{$('#applyUpdate').disabled=false;},12000);
+});
+let reloading=false;
+navigator.serviceWorker?.addEventListener('controllerchange',()=>{
+ if(waitingWorker&&!reloading){reloading=true;location.reload();}
+});
+$('#checkUpdate').onclick=action(async()=>{
+ if(!registration)await setupPWA();
+ await checkPWAUpdate(true);
+});
+addEventListener('online',()=>{if(registration)checkPWAUpdate(false).catch(()=>{});});
+// Check again when the user returns after a release, without refreshing prayer data.
+let lastPwaCheck=0;
+addEventListener('visibilitychange',()=>{
+ if(document.visibilityState==='visible'&&registration&&Date.now()-lastPwaCheck>5*60*1000){
+  lastPwaCheck=Date.now();checkPWAUpdate(false).catch(()=>{});
+ }
+});
 addEventListener('beforeinstallprompt',e=>{e.preventDefault();installEvent=e;$('#install').hidden=false;});$('#install').onclick=action(async()=>{await installEvent?.prompt();installEvent=null;$('#install').hidden=true;});
 // Reload fresh state on return from another tab without replacing active text fields.
 addEventListener('focus',()=>{if(!saveCount&&!unsaved&&!$('#editor').open&&!(tab==='calendar'&&document.activeElement?.closest('#recordForm'))){store.readState().then(s=>{if(s.revision!==state.revision){state=s;render();}}).catch(error);}});
-try{await store.open();state=await store.readState();render();notify('기록을 불러왔습니다');setupPWA().catch(e=>{notify('오프라인 준비 실패 · 연결 상태를 확인해 주세요');error(e);});}catch(e){error(e);$('#main').innerHTML='<section class="panel"><h2>저장소를 열지 못했습니다</h2><p class="muted">위의 오류를 확인하고 일반 Chrome 창에서 다시 열어 주세요. 기존 데이터는 삭제하지 않습니다.</p><button onclick="location.reload()">다시 시도</button></section>';}
+try{await store.open();state=await store.readState();render();notify('기록을 불러왔습니다');window.dispatchEvent(new Event('rosary-app-ready'));setupPWA().catch(e=>{notify('오프라인 준비 실패 · 연결 상태를 확인해 주세요');error(e);});}catch(e){error(e);$('#main').innerHTML='<section class="panel"><h2>저장소를 열지 못했습니다</h2><p class="muted">위의 오류를 확인하고 일반 Chrome 창에서 다시 열어 주세요. 기존 데이터는 삭제하지 않습니다.</p><button onclick="location.reload()">다시 시도</button></section>';}
