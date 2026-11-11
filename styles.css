@@ -192,3 +192,15 @@ footer{margin-top:28px}
 #lightbox.controls-hidden .art-rosaries{opacity:0;visibility:hidden;pointer-events:none;}
 #lightbox .art-rosaries{transition:opacity .15s ease,visibility .15s ease;}
 @media(max-width:380px){#lightbox .art-rosary-bead{width:78px;min-height:100px;}#lightbox .art-rosaries{gap:6px;}}
+
+/* Artwork viewer: mystery name and original decade subject, top-left. */
+#lightbox .lightbox-position{
+ left:max(16px,env(safe-area-inset-left))!important;
+ right:64px!important;
+ width:auto!important;
+ padding:8px 0!important;
+ text-align:left!important;
+ line-height:1.45;
+}
+#lightbox .lightbox-mystery-name{font-size:14px;font-weight:600;}
+#lightbox .lightbox-mystery-subject{font-size:13px;font-weight:400;margin-top:3px;word-break:keep-all;overflow-wrap:break-word;}

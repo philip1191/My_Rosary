@@ -194,7 +194,15 @@ async function showLightboxArt(id){
  lightboxDecade=id;
  renderArtRosaries();
  resetArtZoom();
- $('#lightboxPosition').textContent=`${MYSTERIES[Math.floor(id/5)].name} · ${id%5+1}단`;
+ const mystery=MYSTERIES[Math.floor(id/5)];
+ const position=$('#lightboxPosition');
+ const heading=document.createElement('div');
+ heading.className='lightbox-mystery-name';
+ heading.textContent=`${mystery.name} · ${id%5+1}단`;
+ const subject=document.createElement('div');
+ subject.className='lightbox-mystery-subject';
+ subject.textContent=mystery.titles[id%5];
+ position.replaceChildren(heading,subject);
  $('#largeArt').hidden=true;
  $('#largeArt').removeAttribute('src');
  $('#lightboxEmpty').hidden=!!entry?.art;
