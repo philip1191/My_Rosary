@@ -1,5 +1,5 @@
 // Appearance preferences are independent of prayer records and backup data.
-const KEY='rosary-appearance-v1',DEFAULT={name:'묵주기도 기입장',background:'#f8f5ee',font:'default',logoShape:'square'};
+const KEY='rosary-appearance-v1',DEFAULT={name:'My Rosary',background:'#f8f5ee',font:'default',logoShape:'square'};
 const COLORS=['#f8f5ee','#ffffff','#fff1d6','#fbe4e7','#ffe0cb','#fff4b8','#e5f1df','#d9f2e9','#dfeffb','#eee3f7','#ddd8f4','#ececec','#e9d8c4','#c7ceb4','#26334d','#242424'];
 const $=id=>document.getElementById(id);
 function read(){try{return {...DEFAULT,...JSON.parse(localStorage.getItem(KEY)||'{}')}}catch{return {...DEFAULT}}}
