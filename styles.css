@@ -157,3 +157,6 @@ footer{margin-top:28px}
 .rosary-alert-choice{display:flex;align-items:center;gap:10px;font-size:14px;min-height:38px}
 .rosary-alert-choice input[type=checkbox]{width:20px;height:20px;flex:0 0 20px;accent-color:var(--green)}
 .rosary-alert-settings .field{font-size:13px}
+
+/* Visually lower only the app title; keep logo and header controls unchanged. */
+.masthead .brand h1{transform:translateY(12px)}
