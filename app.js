@@ -79,7 +79,7 @@ function renderMystery(){
  const group=Math.floor(decade/5),num=decade%5,m=MYSTERIES[group],d=state.decades[decade];
  $('#main').innerHTML=`<div class="mystery-tabs" aria-label="신비 선택">${MYSTERIES.map((m,i)=>`<button data-mystery="${i}" class="${i===group?'active':''}" aria-pressed="${i===group}">${m.name}</button>`).join('')}</div><div class="decade-nav"><button id="prevDecade">‹ 이전</button><div class="decade-numbers" aria-label="단 선택">${Array.from({length:5},(_,i)=>`<button data-decade="${group*5+i}" class="${i===num?'active':''}" aria-label="${i+1}단" aria-pressed="${i===num}">${i+1}</button>`).join('')}</div><button id="nextDecade">다음 ›</button></div><div class="mystery-top"><div class="mystery-title"><p class="kicker">${m.name} · ${num+1}단</p><h2>${m.titles[num]}</h2></div></div><div class="book-layout book-layout-custom"><div id="scriptureArea" class="scripture-top"><button id="toggleScripture" class="manage-button" aria-expanded="false">말씀</button><div id="scriptureContents" hidden></div></div><div class="book-sections"><figure class="art-card"><button id="artDisplay" class="art-display" aria-label="${d.art?'성화 확대':'성화 추가'}"><span class="art-placeholder"><span class="art-cross">✝︎</span>${d.art?'성화를 불러오는 중…':'이 신비에 담을 성화<br>＋ 성화 추가'}</span></button><div class="art-actions"><button id="changeArt">${d.art?'성화 변경':'사진 선택'}</button>${d.art?'<button class="danger quiet" id="deleteArt">삭제</button>':''}</div></figure><div class="rosaries rosaries-between">${num===0?rosaryHTML(true):''}${rosaryHTML(false)}</div><div class="reading-column"><div id="assignedList" aria-label="이 단의 기도문"></div><button id="managePrayers" class="manage-button" aria-expanded="${manage}">기도문 추가•관리</button><div id="manageArea" ${manage?'':'hidden'}></div></div></div></div>`;
  $$('[data-mystery]').forEach(b=>b.onclick=action(()=>moveDecade(Number(b.dataset.mystery)*5)));$$('[data-decade]').forEach(b=>b.onclick=action(()=>moveDecade(Number(b.dataset.decade))));$('#prevDecade').onclick=action(()=>moveDecade(decade-1));$('#nextDecade').onclick=action(()=>moveDecade(decade+1));bindRosaries();
- $('#changeArt').onclick=chooseImage;$('#artDisplay').onclick=()=>{if(artURL){lightboxDecade=decade;$('#lightbox').showModal();showLightboxArt(decade);syncWakeLock();}else if(!d.art)chooseImage();};
+ $('#changeArt').onclick=chooseImage;$('#artDisplay').onclick=()=>{if(artURL){lightboxDecade=decade;$('#lightbox').classList.remove('controls-hidden');$('#lightbox').showModal();showLightboxArt(decade);syncWakeLock();}else if(!d.art)chooseImage();};
  if(d.art){loadArt(d.art,renderToken).catch(error);$('#deleteArt').onclick=action(async()=>{if(confirm('이 단의 성화를 삭제할까요?')){const id=decade;await track(store.mutate(s=>{s.decades[id].art=null;}));render();}});}
  $('#toggleScripture').onclick=()=>{const area=$('#scriptureContents');area.hidden=!area.hidden;$('#toggleScripture').setAttribute('aria-expanded',String(!area.hidden));};
  renderScriptures();
@@ -196,6 +196,14 @@ async function showLightboxArt(id){
 function advanceArt(step){showLightboxArt((lightboxDecade+step+20)%20);}
 // Image gestures: pinch to zoom, drag while zoomed, swipe between artworks at 1x.
 let artScale=1,artX=0,artY=0,pinchStart=null,dragStart=null,lastArtTap=0;
+let artTapTimer=null,ignoreMouseClickUntil=0,touchWasMulti=false;
+function cancelArtTap(){if(artTapTimer!==null){clearTimeout(artTapTimer);artTapTimer=null;}}
+function toggleArtControls(){const viewer=$('#lightbox');viewer.classList.toggle('controls-hidden');}
+function registerArtTap(){
+ const now=Date.now();
+ if(now-lastArtTap<330){cancelArtTap();lastArtTap=0;artScale=artScale>1.01?1:2.5;artX=0;artY=0;renderArtZoom();}
+ else{lastArtTap=now;cancelArtTap();artTapTimer=setTimeout(()=>{artTapTimer=null;lastArtTap=0;toggleArtControls();},335);}
+}
 const largeArt=$('#largeArt');
 function renderArtZoom(){largeArt.style.transform=`translate(${artX}px, ${artY}px) scale(${artScale})`;largeArt.classList.toggle('zoomed',artScale>1.01);}
 function resetArtZoom(){artScale=1;artX=0;artY=0;pinchStart=null;dragStart=null;lightboxTouch=null;renderArtZoom();}
@@ -204,11 +212,12 @@ function touchMid(a,b){return {x:(a.clientX+b.clientX)/2,y:(a.clientY+b.clientY)
 $('#lightbox').addEventListener('touchstart',e=>{
  if(e.target.closest('button'))return;
  if(e.touches.length===2){
+  touchWasMulti=true;cancelArtTap();lastArtTap=0;
   const mid=touchMid(e.touches[0],e.touches[1]);
   pinchStart={distance:touchDistance(e.touches[0],e.touches[1]),scale:artScale,x:artX,y:artY,mid};
   lightboxTouch=null;dragStart=null;
  }else if(e.touches.length===1){
-  const t=e.touches[0];lightboxTouch={x:t.clientX,y:t.clientY};
+  touchWasMulti=false;const t=e.touches[0];lightboxTouch={x:t.clientX,y:t.clientY};
   dragStart={x:t.clientX,y:t.clientY,offsetX:artX,offsetY:artY};
  }
 },{passive:true});
@@ -225,21 +234,19 @@ $('#lightbox').addEventListener('touchmove',e=>{
 },{passive:false});
 $('#lightbox').addEventListener('touchend',e=>{
  if(e.touches.length>0){if(e.touches.length===1){const t=e.touches[0];dragStart={x:t.clientX,y:t.clientY,offsetX:artX,offsetY:artY};}return;}
- if(!pinchStart&&artScale<=1.01&&lightboxTouch&&e.changedTouches.length===1){
+ if(!pinchStart&&!touchWasMulti&&lightboxTouch&&e.changedTouches.length===1){
   const dx=e.changedTouches[0].clientX-lightboxTouch.x,dy=e.changedTouches[0].clientY-lightboxTouch.y;
-  if(Math.abs(dx)>55&&Math.abs(dx)>Math.abs(dy)*1.2){advanceArt(dx<0?1:-1);lastArtTap=0;}
-  else if(Math.abs(dx)<18&&Math.abs(dy)<18){
-   const now=Date.now();if(now-lastArtTap<330){artScale=2.5;artX=0;artY=0;renderArtZoom();lastArtTap=0;}else lastArtTap=now;
-  }
+  if(artScale<=1.01&&Math.abs(dx)>55&&Math.abs(dx)>Math.abs(dy)*1.2){cancelArtTap();advanceArt(dx<0?1:-1);lastArtTap=0;}
+  else if(Math.abs(dx)<18&&Math.abs(dy)<18){registerArtTap();}
  }
- pinchStart=null;dragStart=null;lightboxTouch=null;
+ ignoreMouseClickUntil=Date.now()+650;pinchStart=null;dragStart=null;lightboxTouch=null;touchWasMulti=false;
 },{passive:true});
-$('#lightbox').addEventListener('touchcancel',()=>{pinchStart=null;dragStart=null;lightboxTouch=null;});
+$('#lightbox').addEventListener('touchcancel',()=>{pinchStart=null;dragStart=null;lightboxTouch=null;touchWasMulti=false;cancelArtTap();});
 $('#lightbox').addEventListener('keydown',e=>{if(e.key==='ArrowLeft'){e.preventDefault();advanceArt(-1);}if(e.key==='ArrowRight'){e.preventDefault();advanceArt(1);}});
 $('#closeLightbox').onclick=()=>$('#lightbox').close();
-$('#lightbox').addEventListener('close',()=>{const target=lightboxDecade;lightboxSequence++;$('#largeArt').removeAttribute('src');if(lightboxURL)URL.revokeObjectURL(lightboxURL);lightboxURL=null;resetArtZoom();lastArtTap=0;if(tab==='mysteries'&&decade!==target){decade=target;manage=false;render();window.scrollTo(0,0);}syncWakeLock();});
+$('#lightbox').addEventListener('close',()=>{const target=lightboxDecade;lightboxSequence++;$('#largeArt').removeAttribute('src');if(lightboxURL)URL.revokeObjectURL(lightboxURL);lightboxURL=null;resetArtZoom();cancelArtTap();lastArtTap=0;$('#lightbox').classList.remove('controls-hidden');if(tab==='mysteries'&&decade!==target){decade=target;manage=false;render();window.scrollTo(0,0);}syncWakeLock();});
 $('#lightbox').addEventListener('cancel',()=>{lightboxTouch=null;});
-$('#lightbox').addEventListener('click',e=>{if(e.target===$('#lightbox'))$('#lightbox').close();});
+$('#lightbox').addEventListener('click',e=>{if(e.target.closest('button'))return;if(Date.now()<ignoreMouseClickUntil)return;registerArtTap();});
 function download(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);}
 $('#export').onclick=action(async()=>{await flush();const b=await store.backup();download(new Blob([JSON.stringify(b)],{type:'application/json'}),`묵주기도_백업_${localDate()}.json`);notify('성화가 포함된 백업 파일을 내보냈습니다');});
 $('#import').onclick=()=>{$('#backupInput').value='';$('#backupInput').click();};
