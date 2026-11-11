@@ -7,11 +7,9 @@ const localDate=(d=new Date())=>`${d.getFullYear()}-${String(d.getMonth()+1).pad
 const store=new PrayerStore();let state=blankState(),tab='calendar',selected=localDate(),month=new Date(new Date().getFullYear(),new Date().getMonth(),1),decade=0,artURL=null,renderToken=0,manage=false;
 // Wake lock is transient and never stored in the prayer database.
 let wakeLock=null,wakeRequest=0,lightboxDecade=0,lightboxURL=null,lightboxSequence=0,lightboxTouch=null;
-// Per-decade artwork rosary progress is separate from the calendar's prayer counts.
-const ART_ROSARY_KEY='my-rosary-art-beads-v1';
+// Artwork rosary positions are transient: hiding controls does not change them.
+// Closing the viewer discards them; navigation starts each destination fresh.
 let artRosaryProgress={};
-try{const saved=JSON.parse(localStorage.getItem(ART_ROSARY_KEY)||'{}');if(saved&&typeof saved==='object'&&!Array.isArray(saved))artRosaryProgress=saved;}catch(_){}
-function saveArtRosaryProgress(){try{localStorage.setItem(ART_ROSARY_KEY,JSON.stringify(artRosaryProgress));}catch(_){}}
 function wantsWakeLock(){return document.visibilityState==='visible'&&(tab==='mysteries'||tab==='prayers'||$('#lightbox')?.open);}
 async function syncWakeLock(){
  const request=++wakeRequest;
@@ -97,7 +95,7 @@ function renderMystery(){
  artButton.addEventListener('pointerdown',e=>{if(e.isPrimary){artGesture={x:e.clientX,y:e.clientY};artSwiped=false;}});
  artButton.addEventListener('pointerup',e=>{if(!artGesture)return;const dx=e.clientX-artGesture.x,dy=e.clientY-artGesture.y;artGesture=null;if(Math.abs(dx)>45&&Math.abs(dx)>Math.abs(dy)*1.25){artSwiped=true;pendingRosaryLanding=null;moveDecade(decade+(dx<0?1:-1)).catch(error);}});
  artButton.addEventListener('pointercancel',()=>{artGesture=null;});
- artButton.onclick=()=>{if(artSwiped){artSwiped=false;return;}if(artURL){lightboxDecade=decade;$('#lightbox').classList.remove('controls-hidden');$('#lightbox').showModal();showLightboxArt(decade);syncWakeLock();}else if(!d.art)chooseImage();};
+ artButton.onclick=()=>{if(artSwiped){artSwiped=false;return;}if(artURL){artRosaryProgress={};lightboxDecade=decade;$('#lightbox').classList.remove('controls-hidden');$('#lightbox').showModal();showLightboxArt(decade);syncWakeLock();}else if(!d.art)chooseImage();};
  if(d.art){loadArt(d.art,renderToken).catch(error);$('#deleteArt').onclick=action(async()=>{if(confirm('이 단의 성화를 삭제할까요?')){const id=decade;await track(store.mutate(s=>{s.decades[id].art=null;}));render();}});}
  $('#toggleScripture').onclick=()=>{const area=$('#scriptureContents');area.hidden=!area.hidden;$('#toggleScripture').setAttribute('aria-expanded',String(!area.hidden));};
  renderScriptures();
@@ -229,10 +227,9 @@ function renderArtRosaries(){
 function stepArtRosary(start,direction){
  const id=lightboxDecade,names=artRosaryNames(start,id),index=artRosaryIndex(start,id);
  if(direction>0&&index===names.length-1){if(!start){advanceArt(1);}return;}
- if(direction<0&&index===0){const prev=(id+19)%20;artRosaryProgress[`${prev}:decade`]=artRosaryNames(false,prev).length-1;saveArtRosaryProgress();advanceArt(-1);return;}
+ if(direction<0&&index===0){advanceArt(-1,'last');return;}
  const next=index+(direction>0?1:-1);
  artRosaryProgress[`${id}:${start?'start':'decade'}`]=next;
- saveArtRosaryProgress();
  notifyBeadChange(next===(start?START_PRAYERS.length-1:DECADE_PRAYERS.length-1),!start&&id%5===4&&next===names.length-1);
  renderArtRosaries();
 }
@@ -244,7 +241,14 @@ artRosaryWrap.addEventListener('touchend',e=>{if(!artBeadTouch)return;const t=e.
 artRosaryWrap.addEventListener('touchcancel',e=>{artBeadTouch=null;e.stopPropagation();});
 artRosaryWrap.addEventListener('click',e=>{e.stopPropagation();});
 artRosaryWrap.addEventListener('keydown',e=>{const b=e.target.closest('[data-art-rosary]');if(!b)return;if(e.key==='ArrowUp'||e.key==='ArrowDown'){e.preventDefault();stepArtRosary(b.dataset.artRosary==='start',e.key==='ArrowUp'?1:-1);}});
-function advanceArt(step){showLightboxArt((lightboxDecade+step+20)%20);}
+function advanceArt(step,landing='first'){
+ const next=(lightboxDecade+step+20)%20;
+ // Never revive an old position when a new decade/mystery is entered.
+ artRosaryProgress={};
+ // Match the existing horizontal rosary: moving backward lands on the last bead.
+ if(landing==='last')artRosaryProgress[`${next}:decade`]=artRosaryNames(false,next).length-1;
+ showLightboxArt(next);
+}
 // Image gestures: pinch to zoom, drag while zoomed, swipe between artworks at 1x.
 let artScale=1,artX=0,artY=0,pinchStart=null,dragStart=null,lastArtTap=0;
 let artTapTimer=null,ignoreMouseClickUntil=0,touchWasMulti=false;
@@ -295,7 +299,7 @@ $('#lightbox').addEventListener('touchend',e=>{
 $('#lightbox').addEventListener('touchcancel',()=>{pinchStart=null;dragStart=null;lightboxTouch=null;touchWasMulti=false;cancelArtTap();});
 $('#lightbox').addEventListener('keydown',e=>{if(e.key==='ArrowLeft'){e.preventDefault();advanceArt(-1);}if(e.key==='ArrowRight'){e.preventDefault();advanceArt(1);}});
 $('#closeLightbox').onclick=()=>$('#lightbox').close();
-$('#lightbox').addEventListener('close',()=>{const target=lightboxDecade;lightboxSequence++;$('#largeArt').removeAttribute('src');if(lightboxURL)URL.revokeObjectURL(lightboxURL);lightboxURL=null;resetArtZoom();cancelArtTap();lastArtTap=0;$('#lightbox').classList.remove('controls-hidden');artBeadTouch=null;if(tab==='mysteries'&&decade!==target){decade=target;manage=false;render();window.scrollTo(0,0);}syncWakeLock();});
+$('#lightbox').addEventListener('close',()=>{artRosaryProgress={};const target=lightboxDecade;lightboxSequence++;$('#largeArt').removeAttribute('src');if(lightboxURL)URL.revokeObjectURL(lightboxURL);lightboxURL=null;resetArtZoom();cancelArtTap();lastArtTap=0;$('#lightbox').classList.remove('controls-hidden');artBeadTouch=null;if(tab==='mysteries'&&decade!==target){decade=target;manage=false;render();window.scrollTo(0,0);}syncWakeLock();});
 $('#lightbox').addEventListener('cancel',()=>{lightboxTouch=null;});
 $('#lightbox').addEventListener('click',e=>{if(e.target.closest('button'))return;if(Date.now()<ignoreMouseClickUntil)return;registerArtTap();});
 function download(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);}
