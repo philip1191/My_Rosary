@@ -168,3 +168,9 @@ footer{margin-top:28px}
 .brand.logo-circle .brand-logo{border-radius:50%;}
 .logo-shape-options{display:flex;gap:8px;flex-wrap:wrap;}
 .logo-shape-options button[aria-pressed="true"]{background:var(--green);color:var(--accent-ink);border-color:var(--green);font-weight:700;}
+
+/* Match the logo positioning preview to the selected display shape. */
+.crop-viewport.logo-circle canvas{border-radius:50%;}
+
+/* Swipe hint in the art controls row */
+.art-actions{align-items:center;flex-wrap:wrap}.art-swipe-hint{margin-right:auto;font-size:11px;color:var(--muted);line-height:1.5;max-width:55%}.art-display{touch-action:pan-y}
