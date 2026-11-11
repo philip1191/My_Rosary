@@ -1,5 +1,6 @@
 import {PrayerStore,blankState,parseBackup,explainError} from './storage.js';
 import {MYSTERIES,START_PRAYERS,DECADE_PRAYERS} from './mysteries.js';
+import {notifyGloryBead} from './rosary-alerts.js';
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const localDate=(d=new Date())=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
@@ -68,7 +69,7 @@ function rosaryHTML(start,finalDecade=false){return `<button class="rosary" data
 function bindRosaries(){
  $$('.rosary').forEach(b=>{const start=b.dataset.rosary==='start',finalDecade=b.dataset.finalDecade==='true',names=start?START_PRAYERS:(finalDecade?[...DECADE_PRAYERS,'성호경(성모찬송)']:DECADE_PRAYERS),gloryIndex=start?START_PRAYERS.length-1:DECADE_PRAYERS.length-1;let index=0,down=null,suppress=false;
   const paint=()=>{b.querySelector('.beads').innerHTML=names.map((name,i)=>`<i class="bead ${name!=='성모송'?'big':''} ${(start&&i===0)||(finalDecade&&i===names.length-1)?'cross-bead':''} ${i===index?'current':i<index?'done':''}">${(start&&i===0)||(finalDecade&&i===names.length-1)?'✝︎':''}</i>`).join('');b.querySelector('.prayer-name').textContent=start&&index===0?'성호경 · 사도신경':names[index];b.setAttribute('aria-label',`${start?'시작 묵주':'일반 묵주'} ${index+1}/${names.length} ${names[index]}. 좌우로 밀어 기도 이동`);};
-  const step=n=>{const previous=index;index=Math.max(0,Math.min(names.length-1,index+n));paint();if(n>0&&previous<names.length-1&&index===gloryIndex&&typeof navigator.vibrate==='function'){try{navigator.vibrate(80);}catch(_){/* Unsupported or blocked vibration must not interrupt prayer navigation. */}}};
+  const step=n=>{const previous=index;index=Math.max(0,Math.min(names.length-1,index+n));paint();if(n>0&&previous<names.length-1&&index===gloryIndex)notifyGloryBead();};
   b.onpointerdown=e=>{down={y:e.clientY,x:e.clientX,id:e.pointerId};suppress=false;b.setPointerCapture(e.pointerId);};
   b.onpointerup=e=>{if(!down)return;const dy=e.clientY-down.y,dx=e.clientX-down.x;if(Math.abs(dx)>24&&Math.abs(dx)>=Math.abs(dy)){step(dx<0?1:-1);suppress=true;}down=null;};b.onpointercancel=()=>{down=null;suppress=true;};
   b.onclick=e=>e.preventDefault();b.onkeydown=e=>{if(['ArrowLeft','ArrowRight'].includes(e.key)){e.preventDefault();step(e.key==='ArrowLeft'?-1:1);}};paint();

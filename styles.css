@@ -150,3 +150,10 @@ footer{margin-top:28px}
 .help-body .help-section p strong{font-weight:700}
 .help-body .help-section + .help-section{border-top:1px solid var(--line);padding-top:19px}
 @media(max-width:700px){.help-body .help-section h3{font-size:18px}.help-body .help-section p{font-size:13.5px}}
+
+/* Independent vibration and sound preferences in Appearance. */
+.rosary-alert-settings{border-top:1px solid var(--line);padding-top:18px;display:grid;gap:10px}
+.rosary-alert-settings>strong{font-size:16px}
+.rosary-alert-choice{display:flex;align-items:center;gap:10px;font-size:14px;min-height:38px}
+.rosary-alert-choice input[type=checkbox]{width:20px;height:20px;flex:0 0 20px;accent-color:var(--green)}
+.rosary-alert-settings .field{font-size:13px}
