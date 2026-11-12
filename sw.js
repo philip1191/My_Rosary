@@ -1,5 +1,5 @@
 /* Increment CACHE_VERSION for EVERY release, including CSS-only changes. */
-const CACHE_VERSION='rosary-book-shell-1.4.3-art-next-gear';
+const CACHE_VERSION='rosary-book-shell-1.4.4-scroll-gear';
 const SCOPE=new URL(self.registration.scope).pathname;
 const CACHE=CACHE_VERSION+'@'+SCOPE;
 const FILES=['./','./index.html','./styles.css','./app.js','./music.js','./credits.js','./JOHN_MICHEL_CELLO-BACH_AVE_MARIA.ogg','./rosary-alerts.js','./Rain drop.mp3','./Bell.mp3','./settings.js','./backup-extras.js','./storage.js','./mysteries.js','./manifest.webmanifest','./default-header-logo.png','./icons/icon-192.png','./icons/icon-512.png','./icons/maskable-512.png'];

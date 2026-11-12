@@ -48,7 +48,11 @@ async function completeChoice(choice){
  tab='mysteries';
  if(choice==='select'){await moveDecade(Math.floor(id/5)*5);window.scrollTo(0,0);return;}
  pendingRosaryLanding='start';
- await moveDecade((id+1)%20);window.scrollTo(0,0);
+ // Keep the reader at the same scroll position after the completion dialog.
+ // Previously an unconditional scrollTo(0,0) jumped to the top of the page.
+ const readingScrollY=window.scrollY;
+ await moveDecade((id+1)%20);
+ window.scrollTo(0,readingScrollY);
 }
 $('#rosaryCompleteDialog').addEventListener('cancel',e=>e.preventDefault());
 $$('[data-complete-choice]').forEach(b=>b.onclick=action(()=>completeChoice(b.dataset.completeChoice)));
