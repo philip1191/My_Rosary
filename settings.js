@@ -46,3 +46,10 @@ $('cancelCrop').onclick=()=>{$('logoCropPanel').hidden=true;sourceImage=null};$(
 $('defaultLogo').onclick=async()=>{try{await logoSet(null);await refreshLogo();$('logoCropPanel').hidden=true;message('기본 로고로 돌아왔습니다.')}catch{message('로고 초기화에 실패했습니다.')}};
 $('resetAppearance').onclick=async()=>{if(!confirm('이름, 로고, 배경색, 글씨체를 모두 기본값으로 되돌릴까요? 기도 기록은 그대로 유지됩니다.'))return;settings={...DEFAULT};persist();try{await logoSet(null);await refreshLogo();populate();message('기본 디자인으로 돌아왔습니다.')}catch{message('로고 초기화에 실패했습니다.')}};
 apply();refreshLogo().catch(()=>message('사용자 로고를 불러오지 못했습니다.'));
+
+// Prayer auto-record preference is separate from appearance reset and prayer data.
+const autoRecordToggle=document.getElementById('rosaryAutoRecord');
+if(autoRecordToggle){
+ autoRecordToggle.checked=localStorage.getItem('my-rosary-auto-record-v1')!=='off';
+ autoRecordToggle.addEventListener('change',()=>localStorage.setItem('my-rosary-auto-record-v1',autoRecordToggle.checked?'on':'off'));
+}

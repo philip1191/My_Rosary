@@ -11,6 +11,39 @@ let wakeLock=null,wakeRequest=0,lightboxDecade=0,lightboxURL=null,lightboxSequen
 // Artwork rosary positions are transient: hiding controls does not change them.
 // Closing the viewer discards them; navigation starts each destination fresh.
 let artRosaryProgress={};
+const AUTO_RECORD_KEY='my-rosary-auto-record-v1';
+function autoRecordEnabled(){return localStorage.getItem(AUTO_RECORD_KEY)!=='off';}
+async function completeMystery(id){
+ const group=Math.floor(id/5);
+ if(autoRecordEnabled()){
+  const today=localDate();
+  await track(store.mutate(s=>{
+   const old=s.records[today]||{count:0,intention:'',memo:''};
+   const counts=recordMysteries(old).slice();
+   if(counts[group]>999994||old.count>999994)throw new Error('오늘 기도 기록이 최대 단수를 초과합니다.');
+   counts[group]+=5;
+   s.records[today]={...old,count:counts.reduce((a,b)=>a+b,0),mysteries:counts};
+  }));
+ }
+ const dialog=$('#rosaryCompleteDialog');
+ $('#rosaryCompleteTitle').textContent=`${MYSTERIES[group].name} 5단을 완료하셨습니다.`;
+ dialog.dataset.completedDecade=String(id);
+ dialog.showModal();
+}
+async function completeChoice(choice){
+ const dialog=$('#rosaryCompleteDialog'),id=Number(dialog.dataset.completedDecade);
+ dialog.close();
+ if($('#lightbox').open){lightboxDecade=id;$('#lightbox').close();}
+ pendingRosaryLanding=null;
+ if(choice==='calendar'){await changeTab('calendar');return;}
+ tab='mysteries';
+ if(choice==='select'){await moveDecade(Math.floor(id/5)*5);window.scrollTo(0,0);return;}
+ pendingRosaryLanding='start';
+ await moveDecade((id+1)%20);window.scrollTo(0,0);
+}
+$('#rosaryCompleteDialog').addEventListener('cancel',e=>e.preventDefault());
+$$('[data-complete-choice]').forEach(b=>b.onclick=action(()=>completeChoice(b.dataset.completeChoice)));
+
 function wantsWakeLock(){return document.visibilityState==='visible'&&(tab==='mysteries'||tab==='prayers'||$('#lightbox')?.open);}
 async function syncWakeLock(){
  const request=++wakeRequest;
@@ -40,7 +73,12 @@ function track(task){const sequence=++saveSequence;saveCount++;notify('저장 �
 async function flush(){await pending;if(unsaved)throw new Error('저장하지 못한 내용이 있습니다. 현재 화면에서 다시 저장해 주세요.');}
 async function changeTab(next){await flush();tab=next;manage=false;render();syncWakeLock();}
 $$('[data-tab]').forEach(b=>b.onclick=action(()=>changeTab(b.dataset.tab)));
-$('#openHelp').addEventListener('click',()=>$('#helpDialog').showModal());
+$('#openSettings').onclick=action(()=>changeTab('appearance'));
+$('#settingsHelp').onclick=()=>$('#helpDialog').showModal();
+$('#settingsInfo').onclick=()=>$('#appInfoDialog').showModal();
+$('#closeAppInfo').onclick=()=>$('#appInfoDialog').close();
+$('#appInfoDialog').onclick=e=>{if(e.target===$('#appInfoDialog'))$('#appInfoDialog').close();};
+
 $('#closeHelp').addEventListener('click',()=>$('#helpDialog').close());
 $('#helpDialog').addEventListener('click',e=>{if(e.target===$('#helpDialog'))$('#helpDialog').close();});
 window.addEventListener('beforeunload',e=>{if(saveCount||unsaved){e.preventDefault();e.returnValue='';}});
@@ -48,6 +86,7 @@ function render(){
  updateLifetimePrayerTotal();
  renderToken++;if(artURL){URL.revokeObjectURL(artURL);artURL=null;}$('#main').setAttribute('aria-busy','false');
  $$('[data-tab]').forEach(b=>{if(b.dataset.tab===tab)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});
+ $('#openSettings').setAttribute('aria-pressed',String(tab==='appearance')); 
  $('#main').hidden=tab==='appearance';$('#appearancePage').hidden=tab!=='appearance';
  if(tab==='appearance'){window.dispatchEvent(new Event('rosary-appearance-open'));return;}
  if(tab==='calendar')renderCalendar();if(tab==='mysteries')renderMystery();if(tab==='prayers')renderPrayers();
@@ -79,7 +118,7 @@ let pendingRosaryLanding=null;
 function bindRosaries(){
  $$('.rosary').forEach(b=>{const start=b.dataset.rosary==='start',finalDecade=b.dataset.finalDecade==='true',names=start?START_PRAYERS:(finalDecade?[...DECADE_PRAYERS,'(성모찬송)성호경']:DECADE_PRAYERS),gloryIndex=start?START_PRAYERS.length-1:DECADE_PRAYERS.length-1;let index=pendingRosaryLanding===(start?'start':'decade')?0:pendingRosaryLanding==='last'&&!start?names.length-1:0,down=null,suppress=false;
   const paint=()=>{b.querySelector('.beads').innerHTML=names.map((name,i)=>`<i class="bead ${name!=='성모송'?'big':''} ${(start&&i===0)||(finalDecade&&i===names.length-1)?'cross-bead':''} ${i===index?'current':i<index?'done':''}">${(start&&i===0)||(finalDecade&&i===names.length-1)?'✝︎':''}</i>`).join('');b.querySelector('.prayer-name').textContent=start&&index===0?'성호경 · 사도신경':names[index];b.setAttribute('aria-label',`${start?'시작 묵주':'일반 묵주'} ${index+1}/${names.length} ${names[index]}. 좌우로 밀어 기도 이동`);};
-  const step=n=>{if(index===0&&n<0){notifyBeadChange(false,false,-1);pendingRosaryLanding='last';moveDecade(decade-1).catch(error);return;}if(index===names.length-1&&n>0){if(!start){notifyBeadChange(false,false,1);pendingRosaryLanding=decade%5===4?'start':'decade';moveDecade(decade+1).catch(error);}return;}const previous=index;index=Math.max(0,Math.min(names.length-1,index+n));paint();if(index!==previous)notifyBeadChange(index===gloryIndex,finalDecade&&index===names.length-1,n);};
+  const step=n=>{if(index===0&&n<0){notifyBeadChange(false,false,-1);pendingRosaryLanding='last';moveDecade(decade-1).catch(error);return;}if(index===names.length-1&&n>0){if(!start){notifyBeadChange(false,false,1);if(decade%5===4){completeMystery(decade).catch(error);}else{pendingRosaryLanding='decade';moveDecade(decade+1).catch(error);}}return;}const previous=index;index=Math.max(0,Math.min(names.length-1,index+n));paint();if(index!==previous)notifyBeadChange(index===gloryIndex,finalDecade&&index===names.length-1,n);};
   b.onpointerdown=e=>{down={y:e.clientY,x:e.clientX,id:e.pointerId};suppress=false;b.setPointerCapture(e.pointerId);};
   b.onpointerup=e=>{if(!down)return;const dy=e.clientY-down.y,dx=e.clientX-down.x;if(Math.abs(dx)>24&&Math.abs(dx)>=Math.abs(dy)){step(dx<0?1:-1);suppress=true;}down=null;};b.onpointercancel=()=>{down=null;suppress=true;};
   b.onclick=e=>e.preventDefault();b.onkeydown=e=>{if(['ArrowLeft','ArrowRight'].includes(e.key)){e.preventDefault();step(e.key==='ArrowLeft'?-1:1);}};paint();
@@ -236,7 +275,7 @@ function renderArtRosaries(){
 }
 function stepArtRosary(start,direction){
  const id=lightboxDecade,names=artRosaryNames(start,id),index=artRosaryIndex(start,id);
- if(direction>0&&index===names.length-1){if(!start){notifyBeadChange(false,false,1);advanceArt(1);}return;}
+ if(direction>0&&index===names.length-1){if(!start){notifyBeadChange(false,false,1);if(id%5===4)completeMystery(id).catch(error);else advanceArt(1);}return;}
  if(direction<0&&index===0){notifyBeadChange(false,false,-1);advanceArt(-1,'last');return;}
  const next=index+(direction>0?1:-1);
  artRosaryProgress[`${id}:${start?'start':'decade'}`]=next;
