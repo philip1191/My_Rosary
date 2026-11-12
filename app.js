@@ -33,7 +33,16 @@ async function completeMystery(id){
 async function completeChoice(choice){
  const dialog=$('#rosaryCompleteDialog'),id=Number(dialog.dataset.completedDecade);
  dialog.close();
- if($('#lightbox').open){lightboxDecade=id;$('#lightbox').close();}
+ const artworkOpen=$('#lightbox').open;
+ // In artwork mode, Next Mystery must stay in the full-screen artwork viewer.
+ // The other choices intentionally leave the viewer as before.
+ if(choice==='next'&&artworkOpen){
+  pendingRosaryLanding=null;
+  artRosaryProgress={};
+  await showLightboxArt((id+1)%20);
+  return;
+ }
+ if(artworkOpen){lightboxDecade=id;$('#lightbox').close();}
  pendingRosaryLanding=null;
  if(choice==='calendar'){await changeTab('calendar');return;}
  tab='mysteries';

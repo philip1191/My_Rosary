@@ -206,7 +206,8 @@ footer{margin-top:28px}
 #lightbox .lightbox-mystery-subject{font-size:13px;font-weight:400;margin-top:3px;word-break:keep-all;overflow-wrap:break-word;}
 
 /* Settings screen navigation: retains the existing appearance page and data. */
-.settings-trigger{display:inline-flex;align-items:center;justify-content:center;padding:8px}
+.settings-trigger{display:inline-flex;align-items:center;justify-content:center;padding:0}
+.settings-trigger svg{display:block;width:30px;height:30px;flex:none}
 .settings-section-title{font-size:17px;margin:4px 0 14px}
 .settings-divider{border:0;border-top:1px solid var(--line);margin:24px 0 20px}
 .settings-links{display:flex;flex-direction:column}
