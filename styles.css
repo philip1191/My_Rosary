@@ -247,7 +247,7 @@ footer{margin-top:28px}
 .prayer-image-body{padding:12px 14px 18px;max-height:calc(94dvh - 72px);overflow-y:auto;overscroll-behavior:contain}
 .prayer-image-hint{font-size:13px;line-height:1.7;color:var(--muted);margin:0 0 12px}
 .prayer-image-preview{width:100%;max-width:550px;margin:0 auto 14px}
-#prayerImageCanvas{display:block;width:100%;height:auto;aspect-ratio:1080/1360;touch-action:none;border:1px solid var(--line);border-radius:8px;background:#f6f1e9}
+#prayerImageCanvas{display:block;width:100%;height:auto;aspect-ratio:900/1360;touch-action:none;border:1px solid var(--line);border-radius:8px;background:#ffffff}
 .prayer-image-controls{display:grid;gap:11px;margin:0 auto;max-width:550px}
 .prayer-image-zoom-row{display:flex;align-items:center;flex-wrap:wrap;gap:9px}
 .prayer-image-zoom-row>label{min-width:74px;font-size:13px;font-weight:600}

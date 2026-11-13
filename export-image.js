@@ -2,8 +2,8 @@
 // Saved layouts are keyed by mystery and artwork asset IDs, so replacing one painting
 // restores only that painting's default cover framing.
 export const EXPORT_IMAGE_PREFS_KEY='my-rosary-image-export-v1';
-const W=1080,H=1360;
-const FRAMES=[{x:50,y:205,w:300,h:390},{x:390,y:205,w:300,h:390},{x:730,y:205,w:300,h:390},{x:220,y:635,w:300,h:390},{x:560,y:635,w:300,h:390}];
+const W=900,H=1360;
+const FRAMES=[{x:42,y:255,w:250,h:350},{x:325,y:255,w:250,h:350},{x:608,y:255,w:250,h:350},{x:183,y:640,w:250,h:350},{x:467,y:640,w:250,h:350}];
 const INITIAL=()=>({zoom:1,dx:0,dy:0});
 const clamp=(value,min,max)=>Math.max(min,Math.min(max,value));
 function savedPrefs(){try{const s=JSON.parse(localStorage.getItem(EXPORT_IMAGE_PREFS_KEY)||'null');return s&&typeof s==='object'&&!Array.isArray(s)?s:{}}catch{return {}}}
@@ -37,14 +37,16 @@ export function createPrayerImageExporter({getAsset,logoSource}){
  function paint(exporting=false){
   if(!session)return;
   const {group,count,images,transforms,logo,message}=session;
-  ctx.clearRect(0,0,W,H);ctx.fillStyle='#F6F1E9';ctx.fillRect(0,0,W,H);
-  ctx.fillStyle='#423A34';ctx.textAlign='center';ctx.textBaseline='middle';
-  ctx.font='700 70px system-ui, "Noto Sans KR", sans-serif';
-  ctx.fillText(`${group.name} ${count}단`,W/2,118,W-96);
+  ctx.clearRect(0,0,W,H);ctx.fillStyle='#FFFFFF';ctx.fillRect(0,0,W,H);
+  ctx.fillStyle='#000000';ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.font='700 68px system-ui, "Noto Sans KR", sans-serif';
+  ctx.fillText(`${group.name} ${count}단`,W/2,108,W-72);
+  ctx.font='500 36px system-ui, "Noto Sans KR", sans-serif';
+  ctx.fillText((session.date||'').replace(/-/g,'.'),W/2,160,W-72);
   FRAMES.forEach((frame,i)=>{
    const img=images[i],t=transforms[i];
    ctx.save();ctx.beginPath();ctx.rect(frame.x,frame.y,frame.w,frame.h);ctx.clip();
-   ctx.fillStyle='#E8DFD3';ctx.fillRect(frame.x,frame.y,frame.w,frame.h);
+   ctx.fillStyle='#F3F3F3';ctx.fillRect(frame.x,frame.y,frame.w,frame.h);
    if(img){
     const base=Math.max(frame.w/img.naturalWidth,frame.h/img.naturalHeight);
     const width=img.naturalWidth*base*t.zoom,height=img.naturalHeight*base*t.zoom;
@@ -52,23 +54,23 @@ export function createPrayerImageExporter({getAsset,logoSource}){
     const top=frame.y+(frame.h-height)/2+t.dy*frame.h;
     ctx.drawImage(img,left,top,width,height);
    }else{
-    ctx.fillStyle='#978775';ctx.textAlign='center';ctx.font='500 31px system-ui, sans-serif';
+    ctx.fillStyle='#777777';ctx.textAlign='center';ctx.font='500 30px system-ui, sans-serif';
     ctx.fillText('성화 미등록',frame.x+frame.w/2,frame.y+frame.h/2);
    }
    ctx.restore();
-   ctx.strokeStyle='#C8BCAA';ctx.lineWidth=3;ctx.strokeRect(frame.x,frame.y,frame.w,frame.h);
-   if(!exporting&&selectedFrame===i){ctx.strokeStyle='#2D8265';ctx.lineWidth=7;ctx.strokeRect(frame.x+4,frame.y+4,frame.w-8,frame.h-8);}
+   ctx.strokeStyle='#D0D0D0';ctx.lineWidth=3;ctx.strokeRect(frame.x,frame.y,frame.w,frame.h);
+   if(!exporting&&selectedFrame===i){ctx.strokeStyle='#444444';ctx.lineWidth=7;ctx.strokeRect(frame.x+4,frame.y+4,frame.w-8,frame.h-8);}
   });
   const text=message.trim();
   ctx.font='500 36px system-ui, "Noto Sans KR", sans-serif';
-  const lines=text?wrapLines(ctx,text,770,3):[];
+  const lines=text?wrapLines(ctx,text,600,3):[];
   const widest=lines.length?Math.max(...lines.map(line=>ctx.measureText(line).width)):0;
   const logoSide=92,spacing=text?24:0,groupWidth=logoSide+spacing+widest;
   const xStart=(W-groupWidth)/2;
   const logoTop=1130;
   if(logo){const ratio=Math.min(logoSide/logo.naturalWidth,logoSide/logo.naturalHeight);const iw=logo.naturalWidth*ratio,ih=logo.naturalHeight*ratio;ctx.drawImage(logo,xStart+(logoSide-iw)/2,logoTop+(logoSide-ih)/2,iw,ih);}
-  else{ctx.fillStyle='#A28E74';ctx.font='40px system-ui';ctx.textAlign='center';ctx.fillText('✝',xStart+logoSide/2,logoTop+logoSide/2);}
-  if(lines.length){ctx.fillStyle='#55493E';ctx.textAlign='left';ctx.textBaseline='middle';const lineH=45,totalH=lines.length*lineH;const textY=logoTop+logoSide/2-totalH/2+lineH/2;lines.forEach((line,i)=>ctx.fillText(line,xStart+logoSide+spacing,textY+i*lineH));}
+  else{ctx.fillStyle='#555555';ctx.font='40px system-ui';ctx.textAlign='center';ctx.fillText('✝',xStart+logoSide/2,logoTop+logoSide/2);}
+  if(lines.length){ctx.fillStyle='#000000';ctx.textAlign='left';ctx.textBaseline='middle';const lineH=45,totalH=lines.length*lineH;const textY=logoTop+logoSide/2-totalH/2+lineH/2;lines.forEach((line,i)=>ctx.fillText(line,xStart+logoSide+spacing,textY+i*lineH));}
  }
  function commitSettings(){
   if(!session)return;
