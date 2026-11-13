@@ -260,3 +260,55 @@ footer{margin-top:28px}
 .prayer-image-status{font-size:12px;color:var(--muted);min-height:22px;line-height:1.5;margin:12px auto 4px;max-width:550px}
 .prayer-image-actions{display:flex;justify-content:center;gap:10px;max-width:550px;margin:0 auto}
 .prayer-image-actions button{flex:1}
+
+
+/* Prayer text layered over blurred artwork; the floating rosary remains crisp. */
+#lightbox #largeArt{transition:filter .18s ease;}
+#lightbox.prayer-overlay-active #largeArt{filter:blur(15px) brightness(.48);}
+#lightbox.prayer-overlay-active .lightbox-empty{opacity:.6;}
+#lightbox .lightbox-prayers-trigger{
+ position:absolute;z-index:7;
+ bottom:max(16px,env(safe-area-inset-bottom));
+ left:max(14px,env(safe-area-inset-left));
+ width:48px;height:48px;min-height:48px;padding:0;
+ display:flex;align-items:center;justify-content:center;
+ border:1px solid #ffffff75;border-radius:12px;
+ background:#0008;color:#fff;touch-action:manipulation;
+ -webkit-tap-highlight-color:transparent;
+}
+#lightbox .lightbox-prayers-trigger svg{display:block;width:29px;height:29px;flex:none;}
+#lightbox .lightbox-prayers-trigger[aria-expanded="true"]{background:#ffffff30;border-color:#fff;}
+#lightbox .lightbox-prayers-trigger:focus-visible{outline:2px solid #fff;outline-offset:3px;}
+#lightbox .lightbox-prayer-panel{
+ position:absolute;z-index:4;
+ top:max(94px,calc(env(safe-area-inset-top) + 88px));
+ bottom:max(88px,calc(env(safe-area-inset-bottom) + 78px));
+ left:max(16px,env(safe-area-inset-left));
+ width:calc(70% - 16px);
+ overflow:auto;overscroll-behavior:contain;
+ -webkit-overflow-scrolling:touch;
+ color:#fff;font-size:15px;line-height:1.75;
+ text-shadow:0 1px 3px #000c;
+ touch-action:pan-y;
+}
+#lightbox .lightbox-prayer-panel[hidden]{display:none!important;}
+#lightbox .lightbox-prayer-list{display:flex;flex-direction:column;gap:12px;padding:4px 8px 22px 0;}
+#lightbox .lightbox-prayer-entry{background:#0005;border:1px solid #ffffff3d;border-radius:10px;overflow:hidden;}
+#lightbox .lightbox-prayer-entry summary{
+ display:list-item;cursor:pointer;list-style-position:inside;
+ padding:11px 10px;font-weight:650;font-size:15px;
+ color:#fff;line-height:1.45;word-break:keep-all;
+}
+#lightbox .lightbox-prayer-entry summary:focus-visible{outline:2px solid #fff;outline-offset:-2px;}
+#lightbox .lightbox-prayer-entry[open] summary{border-bottom:1px solid #ffffff30;}
+#lightbox .lightbox-prayer-text{padding:12px;color:#fff;font-size:14px;font-weight:400;line-height:1.9;white-space:pre-wrap;overflow-wrap:anywhere;}
+#lightbox .lightbox-prayer-empty{padding:12px 4px;color:#fff;font-size:14px;}
+@media(max-width:400px){
+ #lightbox .lightbox-prayer-panel{left:12px;width:calc(72% - 12px);font-size:14px;}
+ #lightbox .lightbox-prayer-entry summary{font-size:14px;}
+ #lightbox .lightbox-prayer-text{font-size:13px;}
+}
+@media(orientation:landscape) and (max-height:520px){
+ #lightbox .lightbox-prayer-panel{top:69px;bottom:67px;}
+ #lightbox .lightbox-prayers-trigger{width:42px;height:42px;min-height:42px;}
+}

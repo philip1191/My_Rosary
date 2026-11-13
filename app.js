@@ -286,12 +286,57 @@ function editPrayer(id=null,attach=false){
  const p=state.prayers.find(p=>p.id===id)||{title:'',body:''},target=activeKey();
  openEditor(id?'기도문 수정':'새 기도문',`<label class="field">제목<input id="prayerTitle" required value="${esc(p.title)}"></label><label class="field">본문<textarea id="prayerBody" required>${esc(p.body)}</textarea></label>${attach?scopeHTML():''}`,async()=>{const title=$('#prayerTitle').value.trim(),body=$('#prayerBody').value.trim();if(!title||!body)throw new Error('제목과 본문을 입력해 주세요.');const pid=id||crypto.randomUUID(),scope=attach&&target!=='opening'?$('#editor input[name=scope]:checked').value:'one';await track(store.mutate(s=>{const found=s.prayers.find(p=>p.id===pid);if(found){found.title=title;found.body=body;}else s.prayers.push({id:pid,title,body});if(attach)assign(s,pid,scope,target);}));if(tab==='prayers')renderPrayers();else{renderAssigned();renderManage();}});
 }
+// View-only prayer overlay for the current decade or shared opening prayer.
+const lightboxPrayerPanel=$('#lightboxPrayers');
+const lightboxPrayerList=$('#lightboxPrayerList');
+const lightboxPrayerButton=$('#toggleLightboxPrayers');
+function renderLightboxPrayers(){
+ if(lightboxPrayerPanel.hidden)return;
+ const entry=pageData(state,lightboxIsOpening?'opening':lightboxDecade);
+ const byId=new Map(state.prayers.map(prayer=>[prayer.id,prayer]));
+ const prayers=(entry?.prayers||[]).map(id=>byId.get(id)).filter(Boolean);
+ const fragment=document.createDocumentFragment();
+ if(!prayers.length){
+  const empty=document.createElement('p');
+  empty.className='lightbox-prayer-empty';
+  empty.textContent='이 단에 등록된 기도문이 없습니다.';
+  fragment.append(empty);
+ }else for(const prayer of prayers){
+  const details=document.createElement('details');
+  details.className='lightbox-prayer-entry';
+  const summary=document.createElement('summary');
+  summary.textContent=prayer.title;
+  const body=document.createElement('div');
+  body.className='lightbox-prayer-text';
+  body.textContent=prayer.body;
+  details.append(summary,body);
+  fragment.append(details);
+ }
+ lightboxPrayerList.replaceChildren(fragment);
+ lightboxPrayerPanel.scrollTop=0;
+}
+function setLightboxPrayerMode(enabled){
+ const viewer=$('#lightbox');
+ lightboxPrayerPanel.hidden=!enabled;
+ viewer.classList.toggle('prayer-overlay-active',enabled);
+ lightboxPrayerButton.setAttribute('aria-expanded',String(enabled));
+ lightboxPrayerButton.setAttribute('aria-label',enabled?'기도문 닫기':'기도문 보기');
+ lightboxPrayerButton.title=enabled?'기도문 닫기':'기도문 보기';
+ if(enabled){viewer.classList.remove('controls-hidden');cancelArtTap();lastArtTap=0;renderLightboxPrayers();}
+}
+lightboxPrayerButton.addEventListener('click',()=>setLightboxPrayerMode(lightboxPrayerPanel.hidden));
+// Prevent prayer scrolling and tapping from triggering the gallery gestures.
+for(const type of ['touchstart','touchmove','touchend','touchcancel','click','dblclick','pointerdown','pointermove','pointerup']){
+ lightboxPrayerPanel.addEventListener(type,e=>e.stopPropagation(),{passive:true});
+}
+lightboxPrayerPanel.addEventListener('keydown',e=>e.stopPropagation());
 async function showLightboxArt(id,opening=false){
  const seq=++lightboxSequence,entry=pageData(state,opening?'opening':id);
  const previous=lightboxURL;
  // Every decade is navigable, including decades without an uploaded image.
  lightboxDecade=id;lightboxIsOpening=opening;
  renderArtRosaries();
+ if(!lightboxPrayerPanel.hidden)renderLightboxPrayers();
  resetArtZoom();
  const mystery=MYSTERIES[Math.floor(id/5)];
  const position=$('#lightboxPosition');
@@ -485,7 +530,7 @@ $('#lightbox').addEventListener('touchend',e=>{
 $('#lightbox').addEventListener('touchcancel',()=>{pinchStart=null;dragStart=null;lightboxTouch=null;touchWasMulti=false;cancelArtTap();});
 $('#lightbox').addEventListener('keydown',e=>{if(e.key==='ArrowLeft'){e.preventDefault();advanceArt(-1);}if(e.key==='ArrowRight'){e.preventDefault();advanceArt(1);}});
 $('#closeLightbox').onclick=()=>$('#lightbox').close();
-$('#lightbox').addEventListener('close',()=>{const target=lightboxDecade,targetOpening=lightboxIsOpening;lightboxSequence++;$('#largeArt').removeAttribute('src');if(lightboxURL)URL.revokeObjectURL(lightboxURL);lightboxURL=null;resetArtZoom();cancelArtTap();lastArtTap=0;$('#lightbox').classList.remove('controls-hidden');stopArtRosaryHold();artBeadTouch=null;artRosaryWrap.classList.remove('is-positioning');if(tab==='mysteries'&&(decade!==target||isOpening!==targetOpening)){decade=target;isOpening=targetOpening;manage=false;render();window.scrollTo(0,0);}else if(tab==='mysteries'){syncMainRosaryDisplay();}syncWakeLock();});
+$('#lightbox').addEventListener('close',()=>{setLightboxPrayerMode(false);const target=lightboxDecade,targetOpening=lightboxIsOpening;lightboxSequence++;$('#largeArt').removeAttribute('src');if(lightboxURL)URL.revokeObjectURL(lightboxURL);lightboxURL=null;resetArtZoom();cancelArtTap();lastArtTap=0;$('#lightbox').classList.remove('controls-hidden');stopArtRosaryHold();artBeadTouch=null;artRosaryWrap.classList.remove('is-positioning');if(tab==='mysteries'&&(decade!==target||isOpening!==targetOpening)){decade=target;isOpening=targetOpening;manage=false;render();window.scrollTo(0,0);}else if(tab==='mysteries'){syncMainRosaryDisplay();}syncWakeLock();});
 $('#lightbox').addEventListener('cancel',()=>{lightboxTouch=null;});
 $('#lightbox').addEventListener('click',e=>{if(e.target.closest('button'))return;if(Date.now()<ignoreMouseClickUntil)return;registerArtTap();});
 function download(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);}
