@@ -1,13 +1,16 @@
 import {collectExtras,validateExtras,restoreExtras} from './backup-extras.js';
-import {PrayerStore,blankState,parseBackup,explainError} from './storage.js';
+import {PrayerStore,blankState,blankOpening,parseBackup,explainError} from './storage.js';
 import {MYSTERIES,START_PRAYERS,DECADE_PRAYERS} from './mysteries.js';
 import {notifyBeadChange} from './rosary-alerts.js';
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const localDate=(d=new Date())=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-const store=new PrayerStore();let state=blankState(),tab='calendar',selected=localDate(),month=new Date(new Date().getFullYear(),new Date().getMonth(),1),decade=0,artURL=null,renderToken=0,manage=false;
+const store=new PrayerStore();let state=blankState(),tab='calendar',selected=localDate(),month=new Date(new Date().getFullYear(),new Date().getMonth(),1),decade=0,isOpening=true,artURL=null,renderToken=0,manage=false;
+const activeKey=()=>isOpening?'opening':decade;
+const pageData=(s,key=activeKey())=>key==='opening'?(s.opening||blankOpening()):s.decades[key];
+const editablePage=(s,key)=>key==='opening'?(s.opening||(s.opening=blankOpening())):s.decades[key];
 // Wake lock is transient and never stored in the prayer database.
-let wakeLock=null,wakeRequest=0,lightboxDecade=0,lightboxURL=null,lightboxSequence=0,lightboxTouch=null;
+let wakeLock=null,wakeRequest=0,lightboxDecade=0,lightboxIsOpening=false,lightboxURL=null,lightboxSequence=0,lightboxTouch=null;
 // Artwork rosary positions are transient: hiding controls does not change them.
 // Closing the viewer discards them; navigation starts each destination fresh.
 let artRosaryProgress={};
@@ -129,27 +132,34 @@ async function saveRecord(){
 function rosaryHTML(start,finalDecade=false){return `<button class="rosary" data-final-decade="${finalDecade}" data-rosary="${start?'start':'decade'}" aria-label="${start?'시작 묵주':'일반 묵주'}"><span class="beads"></span><span class="prayer-name"></span></button>`;}
 let pendingRosaryLanding=null;
 function bindRosaries(){
- $$('.rosary').forEach(b=>{const start=b.dataset.rosary==='start',finalDecade=b.dataset.finalDecade==='true',names=start?START_PRAYERS:(finalDecade?[...DECADE_PRAYERS,'(성모찬송)성호경']:DECADE_PRAYERS),gloryIndex=start?START_PRAYERS.length-1:DECADE_PRAYERS.length-1;let index=pendingRosaryLanding===(start?'start':'decade')?0:pendingRosaryLanding==='last'&&!start?names.length-1:0,down=null,suppress=false;
+ $$('.rosary').forEach(b=>{const start=b.dataset.rosary==='start',finalDecade=b.dataset.finalDecade==='true',names=start?START_PRAYERS:(finalDecade?[...DECADE_PRAYERS,'(성모찬송)성호경']:DECADE_PRAYERS),gloryIndex=start?START_PRAYERS.length-1:DECADE_PRAYERS.length-1;let index=pendingRosaryLanding===(start?'start':'decade')?0:(pendingRosaryLanding==='last'&&!start||pendingRosaryLanding==='last-start'&&start)?names.length-1:0,down=null,suppress=false;
   const paint=()=>{b.querySelector('.beads').innerHTML=names.map((name,i)=>`<i class="bead ${name!=='성모송'?'big':''} ${(start&&i===0)||(finalDecade&&i===names.length-1)?'cross-bead':''} ${i===index?'current':i<index?'done':''}">${(start&&i===0)||(finalDecade&&i===names.length-1)?'✝︎':''}</i>`).join('');b.querySelector('.prayer-name').textContent=start&&index===0?'성호경 · 사도신경':names[index];b.setAttribute('aria-label',`${start?'시작 묵주':'일반 묵주'} ${index+1}/${names.length} ${names[index]}. 좌우로 밀어 기도 이동`);};
-  const step=n=>{if(index===0&&n<0){notifyBeadChange(false,false,-1);pendingRosaryLanding='last';moveDecade(decade-1).catch(error);return;}if(index===names.length-1&&n>0){if(!start){notifyBeadChange(false,false,1);if(decade%5===4){completeMystery(decade).catch(error);}else{pendingRosaryLanding='decade';moveDecade(decade+1).catch(error);}}return;}const previous=index;index=Math.max(0,Math.min(names.length-1,index+n));paint();if(index!==previous)notifyBeadChange(index===gloryIndex,finalDecade&&index===names.length-1,n);};
+  const step=n=>{
+   if(index===0&&n<0){notifyBeadChange(false,false,-1);if(start){pendingRosaryLanding='last';moveDecade(decade-1).catch(error);}else if(decade%5===0){pendingRosaryLanding='last-start';moveOpening().catch(error);}else{pendingRosaryLanding='last';moveDecade(decade-1).catch(error);}return;}
+   if(index===names.length-1&&n>0){notifyBeadChange(false,false,1);if(start){pendingRosaryLanding='decade';moveDecade(decade).catch(error);}else if(decade%5===4){completeMystery(decade).catch(error);}else{pendingRosaryLanding='decade';moveDecade(decade+1).catch(error);}return;}
+   const previous=index;index=Math.max(0,Math.min(names.length-1,index+n));paint();if(index!==previous)notifyBeadChange(index===gloryIndex,finalDecade&&index===names.length-1,n);
+  };
   b.onpointerdown=e=>{down={y:e.clientY,x:e.clientX,id:e.pointerId};suppress=false;b.setPointerCapture(e.pointerId);};
   b.onpointerup=e=>{if(!down)return;const dy=e.clientY-down.y,dx=e.clientX-down.x;if(Math.abs(dx)>24&&Math.abs(dx)>=Math.abs(dy)){step(dx<0?1:-1);suppress=true;}down=null;};b.onpointercancel=()=>{down=null;suppress=true;};
   b.onclick=e=>e.preventDefault();b.onkeydown=e=>{if(['ArrowLeft','ArrowRight'].includes(e.key)){e.preventDefault();step(e.key==='ArrowLeft'?-1:1);}};paint();
  });
  pendingRosaryLanding=null;
 }
-async function moveDecade(id){await flush();decade=(id+20)%20;manage=false;render();}
+async function moveDecade(id){await flush();decade=(id+20)%20;isOpening=false;manage=false;render();}
+async function moveOpening(group=Math.floor(decade/5)){await flush();decade=group*5;isOpening=true;manage=false;render();}
+async function movePreviousPage(){if(isOpening)return moveDecade(decade-1);if(decade%5===0)return moveOpening();return moveDecade(decade-1);}
+async function moveNextPage(){return isOpening?moveDecade(decade):moveDecade(decade+1);}
 function renderMystery(){
- const group=Math.floor(decade/5),num=decade%5,m=MYSTERIES[group],d=state.decades[decade];
- $('#main').innerHTML=`<div class="mystery-tabs" aria-label="신비 선택">${MYSTERIES.map((m,i)=>`<button data-mystery="${i}" class="${i===group?'active':''}" aria-pressed="${i===group}">${m.name}</button>`).join('')}</div><div class="decade-nav"><button id="prevDecade">‹ 이전</button><div class="decade-numbers" aria-label="단 선택">${Array.from({length:5},(_,i)=>`<button data-decade="${group*5+i}" class="${i===num?'active':''}" aria-label="${i+1}단" aria-pressed="${i===num}">${i+1}</button>`).join('')}</div><button id="nextDecade">다음 ›</button></div><div class="mystery-top"><div class="mystery-title"><p class="kicker">${m.name} · ${num+1}단</p><h2>${m.titles[num]}</h2></div></div><div class="book-layout book-layout-custom"><div id="scriptureArea" class="scripture-top"><button id="toggleScripture" class="manage-button" aria-expanded="false">말씀</button><div id="scriptureContents" hidden></div></div><div class="book-sections"><figure class="art-card"><button id="artDisplay" class="art-display" aria-label="${d.art?'성화 확대':'성화 추가'}"><span class="art-placeholder"><span class="art-cross">✝︎</span>${d.art?'성화를 불러오는 중…':'이 신비에 담을 성화<br>＋ 성화 추가'}</span></button><div class="art-actions"><span class="art-swipe-hint">터치하면 확대 · 좌우로 밀면 이동</span><button id="changeArt">${d.art?'성화 변경':'사진 선택'}</button>${d.art?'<button class="danger quiet" id="deleteArt">삭제</button>':''}</div></figure><div class="rosaries rosaries-between">${num===0?rosaryHTML(true):''}${rosaryHTML(false,num===4)}</div><div class="reading-column"><div id="assignedList" aria-label="이 단의 기도문"></div><button id="managePrayers" class="manage-button" aria-expanded="${manage}">기도문 추가•관리</button><div id="manageArea" ${manage?'':'hidden'}></div></div></div></div>`;
- $$('[data-mystery]').forEach(b=>b.onclick=action(()=>moveDecade(Number(b.dataset.mystery)*5)));$$('[data-decade]').forEach(b=>b.onclick=action(()=>moveDecade(Number(b.dataset.decade))));$('#prevDecade').onclick=action(()=>moveDecade(decade-1));$('#nextDecade').onclick=action(()=>moveDecade(decade+1));bindRosaries();
+ const group=Math.floor(decade/5),num=decade%5,m=MYSTERIES[group],d=pageData(state);
+ $('#main').innerHTML=`<div class="mystery-tabs" aria-label="신비 선택">${MYSTERIES.map((m,i)=>`<button data-mystery="${i}" class="${i===group?'active':''}" aria-pressed="${i===group}">${m.name}</button>`).join('')}</div><div class="decade-nav"><button id="prevDecade">‹ 이전</button><div class="decade-numbers" aria-label="단 선택"><button data-opening="${group}" class="opening-stage ${isOpening?'active':''}" aria-label="시작기도" aria-pressed="${isOpening}">시작기도</button>${Array.from({length:5},(_,i)=>`<button data-decade="${group*5+i}" class="${!isOpening&&i===num?'active':''}" aria-label="${i+1}단" aria-pressed="${!isOpening&&i===num}">${i+1}</button>`).join('')}</div><button id="nextDecade">다음 ›</button></div><div class="mystery-top"><div class="mystery-title"><p class="kicker">${m.name} · ${isOpening?'시작기도':`${num+1}단`}</p><h2>${isOpening?'시작기도':m.titles[num]}</h2></div></div><div class="book-layout book-layout-custom"><div id="scriptureArea" class="scripture-top"><button id="toggleScripture" class="manage-button" aria-expanded="false">말씀</button><div id="scriptureContents" hidden></div></div><div class="book-sections"><figure class="art-card"><button id="artDisplay" class="art-display" aria-label="${d.art?'성화 확대':'성화 추가'}"><span class="art-placeholder"><span class="art-cross">✝︎</span>${d.art?'성화를 불러오는 중…':isOpening?'시작기도에 담을 성화<br>＋ 성화 추가':'이 신비에 담을 성화<br>＋ 성화 추가'}</span></button><div class="art-actions"><span class="art-swipe-hint">터치하면 확대 · 좌우로 밀면 이동</span><button id="changeArt">${d.art?'성화 변경':'사진 선택'}</button>${d.art?'<button class="danger quiet" id="deleteArt">삭제</button>':''}</div></figure><div class="rosaries rosaries-between">${isOpening?rosaryHTML(true):rosaryHTML(false,num===4)}</div><div class="reading-column"><div id="assignedList" aria-label="이 단의 기도문"></div><button id="managePrayers" class="manage-button" aria-expanded="${manage}">기도문 추가•관리</button><div id="manageArea" ${manage?'':'hidden'}></div></div></div></div>`;
+ $$('[data-mystery]').forEach(b=>b.onclick=action(()=>moveOpening(Number(b.dataset.mystery))));$$('[data-opening]').forEach(b=>b.onclick=action(()=>moveOpening(Number(b.dataset.opening))));$$('[data-decade]').forEach(b=>b.onclick=action(()=>moveDecade(Number(b.dataset.decade))));$('#prevDecade').onclick=action(movePreviousPage);$('#nextDecade').onclick=action(moveNextPage);bindRosaries();
  $('#changeArt').onclick=chooseImage;
  const artButton=$('#artDisplay');let artGesture=null,artSwiped=false;
  artButton.addEventListener('pointerdown',e=>{if(e.isPrimary){artGesture={x:e.clientX,y:e.clientY};artSwiped=false;}});
- artButton.addEventListener('pointerup',e=>{if(!artGesture)return;const dx=e.clientX-artGesture.x,dy=e.clientY-artGesture.y;artGesture=null;if(Math.abs(dx)>45&&Math.abs(dx)>Math.abs(dy)*1.25){artSwiped=true;pendingRosaryLanding=null;moveDecade(decade+(dx<0?1:-1)).catch(error);}});
+ artButton.addEventListener('pointerup',e=>{if(!artGesture)return;const dx=e.clientX-artGesture.x,dy=e.clientY-artGesture.y;artGesture=null;if(Math.abs(dx)>45&&Math.abs(dx)>Math.abs(dy)*1.25){artSwiped=true;pendingRosaryLanding=null;(dx<0?moveNextPage():movePreviousPage()).catch(error);}});
  artButton.addEventListener('pointercancel',()=>{artGesture=null;});
- artButton.onclick=()=>{if(artSwiped){artSwiped=false;return;}if(artURL){artRosaryProgress={};lightboxDecade=decade;$('#lightbox').classList.remove('controls-hidden');$('#lightbox').showModal();showLightboxArt(decade);syncWakeLock();}else if(!d.art)chooseImage();};
- if(d.art){loadArt(d.art,renderToken).catch(error);$('#deleteArt').onclick=action(async()=>{if(confirm('이 단의 성화를 삭제할까요?')){const id=decade;await track(store.mutate(s=>{s.decades[id].art=null;}));render();}});}
+ artButton.onclick=()=>{if(artSwiped){artSwiped=false;return;}if(artURL){artRosaryProgress={};lightboxDecade=decade;lightboxIsOpening=isOpening;$('#lightbox').classList.remove('controls-hidden');$('#lightbox').showModal();showLightboxArt(decade,isOpening);syncWakeLock();}else if(!d.art)chooseImage();};
+ if(d.art){loadArt(d.art,renderToken).catch(error);$('#deleteArt').onclick=action(async()=>{if(confirm('이 단의 성화를 삭제할까요?')){const id=activeKey();await track(store.mutate(s=>{editablePage(s,id).art=null;}));render();}});}
  $('#toggleScripture').onclick=()=>{const area=$('#scriptureContents');area.hidden=!area.hidden;$('#toggleScripture').setAttribute('aria-expanded',String(!area.hidden));};
  renderScriptures();
  $('#managePrayers').onclick=()=>{manage=!manage;$('#manageArea').hidden=!manage;$('#managePrayers').setAttribute('aria-expanded',String(manage));if(manage)renderManage();};renderAssigned();if(manage)renderManage();
@@ -160,18 +170,18 @@ function scripturesFor(d){return Array.isArray(d.scriptures)?d.scriptures:(d.scr
 function editableScriptures(d){if(!Array.isArray(d.scriptures))d.scriptures=scripturesFor(d).map(x=>({...x}));return d.scriptures;}
 function renderScriptures(openId=null){
  const container=$('#scriptureContents');if(!container)return;
- const items=scripturesFor(state.decades[decade]);
+ const items=scripturesFor(pageData(state));
  container.innerHTML=`<div class="scripture-toolbar"><button id="addScripture" class="primary">＋ 말씀 추가</button></div><div id="scriptureList" class="scripture-list">${items.map(p=>`<article class="scripture-entry prayer-sortable" data-scripture-id="${esc(p.id)}"><details class="prayer-fold" ${p.id===openId?'open':''}><summary class="prayer-fold-title">${esc(p.title)}<span class="fold-chevron" aria-hidden="true">⌄</span></summary><div class="prose">${esc(p.body)}</div></details><div class="actions"><button data-edit-scripture="${esc(p.id)}">수정</button><button data-delete-scripture="${esc(p.id)}" class="danger quiet">삭제</button></div></article>`).join('')}</div>${items.length>1?'<p class="drag-hint">말씀을 길게 눌러 위아래로 옮기세요.</p>':''}`;
  $('#addScripture').onclick=()=>editScripture();
  container.querySelectorAll('[data-edit-scripture]').forEach(b=>b.onclick=()=>editScripture(b.dataset.editScripture));
- container.querySelectorAll('[data-delete-scripture]').forEach(b=>b.onclick=action(async()=>{if(!confirm('이 말씀을 삭제할까요?'))return;const id=b.dataset.deleteScripture,target=decade;await track(store.mutate(s=>{const d=s.decades[target];d.scriptures=editableScriptures(d).filter(x=>x.id!==id);}));renderScriptures();}));
+ container.querySelectorAll('[data-delete-scripture]').forEach(b=>b.onclick=action(async()=>{if(!confirm('이 말씀을 삭제할까요?'))return;const id=b.dataset.deleteScripture,target=activeKey();await track(store.mutate(s=>{const d=editablePage(s,target);d.scriptures=editableScriptures(d).filter(x=>x.id!==id);}));renderScriptures();}));
  bindScriptureDrag($('#scriptureList'));
 }
 function editScripture(id=null){
- const target=decade,old=scripturesFor(state.decades[target]).find(x=>x.id===id)||{title:'',body:''};
+ const target=activeKey(),old=scripturesFor(pageData(state,target)).find(x=>x.id===id)||{title:'',body:''};
  openEditor(id?'말씀 수정':'말씀 추가',`<label class="field">제목<input id="scriptureTitle" required value="${esc(old.title)}"></label><label class="field">본문<textarea id="scriptureInput" required>${esc(old.body)}</textarea></label>`,async()=>{
  const title=$('#scriptureTitle').value.trim(),body=$('#scriptureInput').value.trim();if(!title||!body)throw new Error('제목과 본문을 입력해 주세요.');
- const newId=id||crypto.randomUUID();await track(store.mutate(s=>{const items=editableScriptures(s.decades[target]);const found=items.find(x=>x.id===newId);if(found){found.title=title;found.body=body;}else items.push({id:newId,title,body});}));renderScriptures(newId);
+ const newId=id||crypto.randomUUID();await track(store.mutate(s=>{const items=editableScriptures(editablePage(s,target));const found=items.find(x=>x.id===newId);if(found){found.title=title;found.body=body;}else items.push({id:newId,title,body});}));renderScriptures(newId);
  });
 }
 function bindScriptureDrag(list){
@@ -179,7 +189,7 @@ function bindScriptureDrag(list){
  const reorder=y=>{if(!active)return;const other=[...list.children].filter(x=>x!==active);const next=other.find(x=>{const r=x.getBoundingClientRect();return y<r.top+r.height/2;});if(next)list.insertBefore(active,next);else list.append(active);};
  const tick=()=>{if(!active)return;if(lastY<80)window.scrollBy(0,-8);else if(lastY>innerHeight-80)window.scrollBy(0,8);reorder(lastY);raf=requestAnimationFrame(tick);};
  const begin=(row,y)=>{active=row;lastY=y;blockClick=true;row.classList.add('dragging');raf=requestAnimationFrame(tick);};
- const finish=async(cancel=false)=>{clearTimeout(timer);timer=null;start=null;if(raf)cancelAnimationFrame(raf);raf=null;if(!active)return;active.classList.remove('dragging');active=null;if(cancel){renderScriptures();return;}const ids=[...list.children].map(x=>x.dataset.scriptureId),target=decade;try{await track(store.mutate(s=>{const d=s.decades[target],items=editableScriptures(d),byId=new Map(items.map(x=>[x.id,x]));d.scriptures=ids.map(id=>byId.get(id)).filter(Boolean);}));}catch{renderScriptures();}};
+ const finish=async(cancel=false)=>{clearTimeout(timer);timer=null;start=null;if(raf)cancelAnimationFrame(raf);raf=null;if(!active)return;active.classList.remove('dragging');active=null;if(cancel){renderScriptures();return;}const ids=[...list.children].map(x=>x.dataset.scriptureId),target=activeKey();try{await track(store.mutate(s=>{const d=editablePage(s,target),items=editableScriptures(d),byId=new Map(items.map(x=>[x.id,x]));d.scriptures=ids.map(id=>byId.get(id)).filter(Boolean);}));}catch{renderScriptures();}};
  for(const row of list.children){
  row.addEventListener('contextmenu',e=>e.preventDefault());
  row.addEventListener('click',e=>{if(blockClick){e.preventDefault();e.stopPropagation();blockClick=false;}},true);
@@ -191,18 +201,18 @@ function bindScriptureDrag(list){
  row.addEventListener('pointerup',e=>{if(e.pointerType!=='touch')finish();});row.addEventListener('pointercancel',e=>{if(e.pointerType!=='touch')finish(true);});
  }
 }
-function chooseImage(){$('#imageInput').dataset.decade=String(decade);$('#imageInput').value='';$('#imageInput').click();}
-$('#imageInput').onchange=action(async e=>{const f=e.target.files[0];if(!f)return;const id=Number(e.target.dataset.decade);clearError();await track(store.saveArt(id,f));store.compact().catch(error);if(tab==='mysteries'&&decade===id)render();notify('성화 저장 · 파일 내용 및 표시 검증 완료');});
-async function loadArt(id,token){const a=await store.getAsset(id);if(!a?.blob)throw new Error('저장된 성화를 읽지 못했습니다. 백업 파일을 확인해 주세요.');if(token!==renderToken)return;artURL=URL.createObjectURL(a.blob);const img=document.createElement('img');img.alt=`${MYSTERIES[Math.floor(decade/5)].name} ${decade%5+1}단 성화`;img.src=artURL;img.onerror=()=>error(new Error('저장된 성화를 화면에 표시하지 못했습니다.'));$('#artDisplay').replaceChildren(img);}
+function chooseImage(){$('#imageInput').dataset.page=String(activeKey());$('#imageInput').value='';$('#imageInput').click();}
+$('#imageInput').onchange=action(async e=>{const f=e.target.files[0];if(!f)return;const key=e.target.dataset.page,id=key==='opening'?'opening':Number(key);clearError();await track(store.saveArt(id,f));store.compact().catch(error);if(tab==='mysteries'&&activeKey()===id)render();notify('성화 저장 · 파일 내용 및 표시 검증 완료');});
+async function loadArt(id,token){const a=await store.getAsset(id);if(!a?.blob)throw new Error('저장된 성화를 읽지 못했습니다. 백업 파일을 확인해 주세요.');if(token!==renderToken)return;artURL=URL.createObjectURL(a.blob);const img=document.createElement('img');img.alt=isOpening?'시작기도 성화':`${MYSTERIES[Math.floor(decade/5)].name} ${decade%5+1}단 성화`;img.src=artURL;img.onerror=()=>error(new Error('저장된 성화를 화면에 표시하지 못했습니다.'));$('#artDisplay').replaceChildren(img);}
 function prayerAccordion(p,assigned=false){return `<article class="${assigned?'assigned-prayer':'panel prayer-card'} prayer-sortable" data-prayer="${esc(p.id)}"><details class="prayer-fold"><summary class="prayer-fold-title">${esc(p.title)}<span class="fold-chevron" aria-hidden="true">⌄</span></summary><div class="prose">${esc(p.body)}</div></details>${assigned?'':`<div class="actions"><button data-edit-prayer="${esc(p.id)}">수정</button><button data-delete-prayer="${esc(p.id)}" class="danger quiet">삭제</button></div>`}</article>`;}
-function renderAssigned(){const list=$('#assignedList');list.innerHTML=state.decades[decade].prayers.map(id=>{const p=state.prayers.find(p=>p.id===id);return p?prayerAccordion(p,true):'';}).join('');bindDrag(list,'assigned');}
-function scopeHTML(){return '<fieldset style="border:0;padding:0;margin:0"><legend class="muted" style="font-size:11px;margin-top:12px">적용 범위</legend><div class="scope"><label><input type="radio" name="scope" value="all" checked> 전체 20단에 적용</label><label><input type="radio" name="scope" value="one"> 이 단에만 적용</label></div></fieldset>';}
-function assign(s,id,all,target){for(const [key,d] of Object.entries(s.decades))if(all||Number(key)===target)if(!d.prayers.includes(id))d.prayers.push(id);}
+function renderAssigned(){const list=$('#assignedList');list.innerHTML=pageData(state).prayers.map(id=>{const p=state.prayers.find(p=>p.id===id);return p?prayerAccordion(p,true):'';}).join('');bindDrag(list,'assigned');}
+function scopeHTML(){if(isOpening)return '<p class="muted">이 기도문은 네 신비의 공통 시작기도에만 배정됩니다.</p>';return '<fieldset style="border:0;padding:0;margin:0"><legend class="muted" style="font-size:11px;margin-top:12px">적용 범위</legend><div class="scope"><label><input type="radio" name="scope" value="all" checked> 전체 20단에 적용</label><label><input type="radio" name="scope" value="one"> 이 단에만 적용</label></div></fieldset>';}
+function assign(s,id,all,target){if(target==='opening'){const opening=editablePage(s,'opening');if(!opening.prayers.includes(id))opening.prayers.push(id);return;}for(const [key,d] of Object.entries(s.decades))if(all||Number(key)===target)if(!d.prayers.includes(id))d.prayers.push(id);}
 function renderManage(){
- const area=$('#manageArea');area.innerHTML=`<div class="manage-panel"><label class="field">기존 기도문<select id="prayerChoice"><option value="">기도문 선택</option>${state.prayers.map(p=>`<option value="${p.id}">${esc(p.title)}</option>`).join('')}</select></label>${scopeHTML()}<div class="actions"><button id="attachPrayer" class="primary">선택한 기도문 추가</button><button id="newAssigned">새 기도문 입력</button></div><p class="drag-hint">기도문을 길게 눌러 위아래로 옮기세요. 현재 단에만 저장됩니다.</p>${state.decades[decade].prayers.map(id=>{const p=state.prayers.find(p=>p.id===id);return `<div class="manage-row"><span>${esc(p.title)}</span><div class="actions"><button data-remove="${id}" data-scope="one">이 단에서 제거</button><button data-remove="${id}" data-scope="all">20단에서 제거</button></div></div>`;}).join('')}</div>`;
- $('#attachPrayer').onclick=action(async()=>{const id=$('#prayerChoice').value;if(!id)throw new Error('추가할 기도문을 선택해 주세요.');const all=$('#manageArea input[name=scope]:checked').value==='all',target=decade;await track(store.mutate(s=>assign(s,id,all,target)));renderAssigned();renderManage();});
+ const area=$('#manageArea');area.innerHTML=`<div class="manage-panel"><label class="field">기존 기도문<select id="prayerChoice"><option value="">기도문 선택</option>${state.prayers.map(p=>`<option value="${p.id}">${esc(p.title)}</option>`).join('')}</select></label>${scopeHTML()}<div class="actions"><button id="attachPrayer" class="primary">선택한 기도문 추가</button><button id="newAssigned">새 기도문 입력</button></div><p class="drag-hint">기도문을 길게 눌러 위아래로 옮기세요. ${isOpening?'네 신비의 시작기도에 공통 적용됩니다.':'현재 단에만 저장됩니다.'}</p>${pageData(state).prayers.map(id=>{const p=state.prayers.find(p=>p.id===id);return `<div class="manage-row"><span>${esc(p.title)}</span><div class="actions"><button data-remove="${id}" data-scope="one">${isOpening?'시작기도에서 제거':'이 단에서 제거'}</button>${isOpening?'':`<button data-remove="${id}" data-scope="all">20단에서 제거</button>`}</div></div>`;}).join('')}</div>`;
+ $('#attachPrayer').onclick=action(async()=>{const id=$('#prayerChoice').value;if(!id)throw new Error('추가할 기도문을 선택해 주세요.');const all=!isOpening&&$('#manageArea input[name=scope]:checked').value==='all',target=activeKey();await track(store.mutate(s=>assign(s,id,all,target)));renderAssigned();renderManage();});
  $('#newAssigned').onclick=()=>editPrayer(null,true);
- $$('[data-remove]').forEach(b=>b.onclick=action(async()=>{const id=b.dataset.remove,all=b.dataset.scope==='all',target=decade;if(all&&!confirm('전체 20단에서 이 기도문을 제거할까요? 원본은 기도문 탭에 남습니다.'))return;await track(store.mutate(s=>{for(const [key,d] of Object.entries(s.decades))if(all||Number(key)===target)d.prayers=d.prayers.filter(x=>x!==id);}));renderAssigned();renderManage();}));
+ $$('[data-remove]').forEach(b=>b.onclick=action(async()=>{const id=b.dataset.remove,all=b.dataset.scope==='all',target=activeKey();if(all&&!confirm('전체 20단에서 이 기도문을 제거할까요? 원본은 기도문 탭에 남습니다.'))return;await track(store.mutate(s=>{if(target==='opening')editablePage(s,'opening').prayers=editablePage(s,'opening').prayers.filter(x=>x!==id);else for(const [key,d] of Object.entries(s.decades))if(all||Number(key)===target)d.prayers=d.prayers.filter(x=>x!==id);}));renderAssigned();renderManage();}));
 }
 function bindDrag(list,mode='assigned'){
  let timer=null,drag=null,start=null,raf=null,lastY=0,moved=false;
@@ -212,8 +222,8 @@ function bindDrag(list,mode='assigned'){
  const begin=(row,y)=>{drag=row;lastY=y;moved=true;row.classList.add('dragging');notify('위아래로 옮긴 뒤 손을 떼세요');raf=requestAnimationFrame(scroll);};
  const finish=async(cancel=false)=>{clearTimeout(timer);timer=null;start=null;stopScroll();if(!drag)return;drag.classList.remove('dragging');drag=null;
   if(cancel){if(mode==='assigned')renderAssigned();else renderPrayers();notify('이동 취소');return;}
-  const ids=[...list.children].map(x=>x.dataset.prayer),target=decade;
-  try{await track(store.mutate(s=>{if(mode==='library'){const byId=new Map(s.prayers.map(p=>[p.id,p]));s.prayers=ids.map(id=>byId.get(id)).filter(Boolean);}else{const current=s.decades[target].prayers;s.decades[target].prayers=[...ids.filter(id=>current.includes(id)),...current.filter(id=>!ids.includes(id))];}}));}catch{if(mode==='assigned')renderAssigned();else renderPrayers();}
+  const ids=[...list.children].map(x=>x.dataset.prayer),target=activeKey();
+  try{await track(store.mutate(s=>{if(mode==='library'){const byId=new Map(s.prayers.map(p=>[p.id,p]));s.prayers=ids.map(id=>byId.get(id)).filter(Boolean);}else{const targetPage=editablePage(s,target),current=targetPage.prayers;targetPage.prayers=[...ids.filter(id=>current.includes(id)),...current.filter(id=>!ids.includes(id))];}}));}catch{if(mode==='assigned')renderAssigned();else renderPrayers();}
  };
  for(const row of list.children){
   row.addEventListener('contextmenu',e=>e.preventDefault());
@@ -228,7 +238,7 @@ function bindDrag(list,mode='assigned'){
 }
 function renderPrayers(){
  $('#main').innerHTML=`<div class="section-heading"><div><h2>기도문</h2></div><button id="newPrayer" class="primary">＋ 기도문 추가</button></div><div class="prayer-library">${state.prayers.length?state.prayers.map(p=>prayerAccordion(p)).join(''):'<div class="empty-state"><span class="empty-icon">✝︎</span><h3>나만의 기도를 담아 보세요</h3><p>직접 등록한 기도문이 여기에 모입니다.</p></div>'}</div>`;
- bindDrag($('.prayer-library'),'library');$('#newPrayer').onclick=()=>editPrayer();$$('[data-edit-prayer]').forEach(b=>b.onclick=()=>editPrayer(b.dataset.editPrayer));$$('[data-delete-prayer]').forEach(b=>b.onclick=action(async()=>{const id=b.dataset.deletePrayer;if(!confirm('기도문 원본을 삭제할까요? 배정된 모든 단에서도 제거됩니다.'))return;await track(store.mutate(s=>{s.prayers=s.prayers.filter(p=>p.id!==id);Object.values(s.decades).forEach(d=>d.prayers=d.prayers.filter(x=>x!==id));}));renderPrayers();}));
+ bindDrag($('.prayer-library'),'library');$('#newPrayer').onclick=()=>editPrayer();$$('[data-edit-prayer]').forEach(b=>b.onclick=()=>editPrayer(b.dataset.editPrayer));$$('[data-delete-prayer]').forEach(b=>b.onclick=action(async()=>{const id=b.dataset.deletePrayer;if(!confirm('기도문 원본을 삭제할까요? 배정된 모든 단에서도 제거됩니다.'))return;await track(store.mutate(s=>{s.prayers=s.prayers.filter(p=>p.id!==id);Object.values(s.decades).forEach(d=>d.prayers=d.prayers.filter(x=>x!==id));if(s.opening)s.opening.prayers=s.opening.prayers.filter(x=>x!==id);}));renderPrayers();}));
 }
 function openEditor(title,body,save){$('#editorTitle').textContent=title;$('#editorBody').innerHTML=body;editorAction=save;$('#editor').showModal();}
 function closeEditor(){if(!$('#saveEditor').disabled)$('#editor').close();}
@@ -236,24 +246,24 @@ $('#closeEditor').onclick=closeEditor;$('#cancelEditor').onclick=closeEditor;
 $('#editor').addEventListener('cancel',e=>{if($('#saveEditor').disabled)e.preventDefault();});
 $('#editorForm').onsubmit=async e=>{e.preventDefault();$('#saveEditor').disabled=true;clearError();try{await editorAction();$('#editor').close();}catch(err){error(err);let message=$('#editorError');if(!message){message=document.createElement('p');message.id='editorError';message.className='notice error';message.setAttribute('role','alert');$('#editorBody').append(message);}message.textContent=explainError(err);}finally{$('#saveEditor').disabled=false;}};
 function editPrayer(id=null,attach=false){
- const p=state.prayers.find(p=>p.id===id)||{title:'',body:''},target=decade;
- openEditor(id?'기도문 수정':'새 기도문',`<label class="field">제목<input id="prayerTitle" required value="${esc(p.title)}"></label><label class="field">본문<textarea id="prayerBody" required>${esc(p.body)}</textarea></label>${attach?scopeHTML():''}`,async()=>{const title=$('#prayerTitle').value.trim(),body=$('#prayerBody').value.trim();if(!title||!body)throw new Error('제목과 본문을 입력해 주세요.');const pid=id||crypto.randomUUID(),all=attach&&$('#editor input[name=scope]:checked').value==='all';await track(store.mutate(s=>{const found=s.prayers.find(p=>p.id===pid);if(found){found.title=title;found.body=body;}else s.prayers.push({id:pid,title,body});if(attach)assign(s,pid,all,target);}));if(tab==='prayers')renderPrayers();else{renderAssigned();renderManage();}});
+ const p=state.prayers.find(p=>p.id===id)||{title:'',body:''},target=activeKey();
+ openEditor(id?'기도문 수정':'새 기도문',`<label class="field">제목<input id="prayerTitle" required value="${esc(p.title)}"></label><label class="field">본문<textarea id="prayerBody" required>${esc(p.body)}</textarea></label>${attach?scopeHTML():''}`,async()=>{const title=$('#prayerTitle').value.trim(),body=$('#prayerBody').value.trim();if(!title||!body)throw new Error('제목과 본문을 입력해 주세요.');const pid=id||crypto.randomUUID(),all=attach&&target!=='opening'&&$('#editor input[name=scope]:checked').value==='all';await track(store.mutate(s=>{const found=s.prayers.find(p=>p.id===pid);if(found){found.title=title;found.body=body;}else s.prayers.push({id:pid,title,body});if(attach)assign(s,pid,all,target);}));if(tab==='prayers')renderPrayers();else{renderAssigned();renderManage();}});
 }
-async function showLightboxArt(id){
- const seq=++lightboxSequence,entry=state.decades[id];
+async function showLightboxArt(id,opening=false){
+ const seq=++lightboxSequence,entry=pageData(state,opening?'opening':id);
  const previous=lightboxURL;
  // Every decade is navigable, including decades without an uploaded image.
- lightboxDecade=id;
+ lightboxDecade=id;lightboxIsOpening=opening;
  renderArtRosaries();
  resetArtZoom();
  const mystery=MYSTERIES[Math.floor(id/5)];
  const position=$('#lightboxPosition');
  const heading=document.createElement('div');
  heading.className='lightbox-mystery-name';
- heading.textContent=`${mystery.name} · ${id%5+1}단`;
+ heading.textContent=`${mystery.name} · ${opening?'시작기도':`${id%5+1}단`}`;
  const subject=document.createElement('div');
  subject.className='lightbox-mystery-subject';
- subject.textContent=mystery.titles[id%5];
+ subject.textContent=opening?'시작기도':mystery.titles[id%5];
  position.replaceChildren(heading,subject);
  $('#largeArt').hidden=true;
  $('#largeArt').removeAttribute('src');
@@ -267,17 +277,17 @@ async function showLightboxArt(id){
   const url=URL.createObjectURL(asset.blob);
   lightboxURL=url;
   $('#largeArt').src=url;
-  $('#largeArt').alt=`${MYSTERIES[Math.floor(id/5)].name} ${id%5+1}단 성화`;
+  $('#largeArt').alt=opening?'시작기도 성화':`${MYSTERIES[Math.floor(id/5)].name} ${id%5+1}단 성화`;
   $('#largeArt').hidden=false;
  }catch(e){if(seq===lightboxSequence)error(e);}
 }
 // Ask supported browsers to use a dark system bar while artwork is enlarged.
 // Restore the current app theme on closing; unsupported browsers keep their own bars.
 function artRosaryNames(start,id){return start?START_PRAYERS:(id%5===4?[...DECADE_PRAYERS,'(성모찬송)성호경']:DECADE_PRAYERS);}
-function artRosaryIndex(start,id){const key=`${id}:${start?'start':'decade'}`,n=Number(artRosaryProgress[key]);return Number.isInteger(n)?Math.max(0,Math.min(artRosaryNames(start,id).length-1,n)):0;}
+function artRosaryIndex(start,id){const key=start?'opening':`${id}:decade`,n=Number(artRosaryProgress[key]);return Number.isInteger(n)?Math.max(0,Math.min(artRosaryNames(start,id).length-1,n)):0;}
 function renderArtRosaries(){
  const wrap=$('#artRosaries');if(!wrap)return;
- wrap.innerHTML=(lightboxDecade%5===0?'<button type="button" class="art-rosary-bead" data-art-rosary="start" aria-label="시작 기도 구슬"></button>':'')+'<button type="button" class="art-rosary-bead" data-art-rosary="decade" aria-label="단 기도 구슬"></button>';
+ wrap.innerHTML=lightboxIsOpening?'<button type="button" class="art-rosary-bead" data-art-rosary="start" aria-label="시작 기도 구슬"></button>':'<button type="button" class="art-rosary-bead" data-art-rosary="decade" aria-label="단 기도 구슬"></button>'; 
  wrap.querySelectorAll('[data-art-rosary]').forEach(b=>{
   const start=b.dataset.artRosary==='start',names=artRosaryNames(start,lightboxDecade),i=artRosaryIndex(start,lightboxDecade),cross=(start&&i===0)||(!start&&lightboxDecade%5===4&&i===names.length-1);
   const name=start&&i===0?'성호경 · 사도신경':names[i];
@@ -288,10 +298,10 @@ function renderArtRosaries(){
 }
 function stepArtRosary(start,direction){
  const id=lightboxDecade,names=artRosaryNames(start,id),index=artRosaryIndex(start,id);
- if(direction>0&&index===names.length-1){if(!start){notifyBeadChange(false,false,1);if(id%5===4)completeMystery(id).catch(error);else advanceArt(1);}return;}
+ if(direction>0&&index===names.length-1){notifyBeadChange(false,false,1);if(start)advanceArt(1);else if(id%5===4)completeMystery(id).catch(error);else advanceArt(1);return;}
  if(direction<0&&index===0){notifyBeadChange(false,false,-1);advanceArt(-1,'last');return;}
  const next=index+(direction>0?1:-1);
- artRosaryProgress[`${id}:${start?'start':'decade'}`]=next;
+ artRosaryProgress[start?'opening':`${id}:decade`]=next;
  notifyBeadChange(next===(start?START_PRAYERS.length-1:DECADE_PRAYERS.length-1),!start&&id%5===4&&next===names.length-1,direction);
  renderArtRosaries();
 }
@@ -304,12 +314,13 @@ artRosaryWrap.addEventListener('touchcancel',e=>{artBeadTouch=null;e.stopPropaga
 artRosaryWrap.addEventListener('click',e=>{e.stopPropagation();});
 artRosaryWrap.addEventListener('keydown',e=>{const b=e.target.closest('[data-art-rosary]');if(!b)return;if(e.key==='ArrowUp'||e.key==='ArrowDown'){e.preventDefault();stepArtRosary(b.dataset.artRosary==='start',e.key==='ArrowUp'?1:-1);}});
 function advanceArt(step,landing='first'){
- const next=(lightboxDecade+step+20)%20;
- // Never revive an old position when a new decade/mystery is entered.
+ let next,opening=false;
+ if(lightboxIsOpening){next=step>0?lightboxDecade:(lightboxDecade+19)%20;}
+ else if(step<0&&lightboxDecade%5===0){next=lightboxDecade;opening=true;}
+ else next=(lightboxDecade+step+20)%20;
  artRosaryProgress={};
- // Match the existing horizontal rosary: moving backward lands on the last bead.
- if(landing==='last')artRosaryProgress[`${next}:decade`]=artRosaryNames(false,next).length-1;
- showLightboxArt(next);
+ if(landing==='last'){const key=opening?'opening':`${next}:decade`;artRosaryProgress[key]=artRosaryNames(opening,next).length-1;}
+ showLightboxArt(next,opening);
 }
 // Image gestures: pinch to zoom, drag while zoomed, swipe between artworks at 1x.
 let artScale=1,artX=0,artY=0,pinchStart=null,dragStart=null,lastArtTap=0;
@@ -361,7 +372,7 @@ $('#lightbox').addEventListener('touchend',e=>{
 $('#lightbox').addEventListener('touchcancel',()=>{pinchStart=null;dragStart=null;lightboxTouch=null;touchWasMulti=false;cancelArtTap();});
 $('#lightbox').addEventListener('keydown',e=>{if(e.key==='ArrowLeft'){e.preventDefault();advanceArt(-1);}if(e.key==='ArrowRight'){e.preventDefault();advanceArt(1);}});
 $('#closeLightbox').onclick=()=>$('#lightbox').close();
-$('#lightbox').addEventListener('close',()=>{artRosaryProgress={};const target=lightboxDecade;lightboxSequence++;$('#largeArt').removeAttribute('src');if(lightboxURL)URL.revokeObjectURL(lightboxURL);lightboxURL=null;resetArtZoom();cancelArtTap();lastArtTap=0;$('#lightbox').classList.remove('controls-hidden');artBeadTouch=null;if(tab==='mysteries'&&decade!==target){decade=target;manage=false;render();window.scrollTo(0,0);}syncWakeLock();});
+$('#lightbox').addEventListener('close',()=>{artRosaryProgress={};const target=lightboxDecade,targetOpening=lightboxIsOpening;lightboxSequence++;$('#largeArt').removeAttribute('src');if(lightboxURL)URL.revokeObjectURL(lightboxURL);lightboxURL=null;resetArtZoom();cancelArtTap();lastArtTap=0;$('#lightbox').classList.remove('controls-hidden');artBeadTouch=null;if(tab==='mysteries'&&(decade!==target||isOpening!==targetOpening)){decade=target;isOpening=targetOpening;manage=false;render();window.scrollTo(0,0);}syncWakeLock();});
 $('#lightbox').addEventListener('cancel',()=>{lightboxTouch=null;});
 $('#lightbox').addEventListener('click',e=>{if(e.target.closest('button'))return;if(Date.now()<ignoreMouseClickUntil)return;registerArtTap();});
 function download(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);}

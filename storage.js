@@ -1,7 +1,8 @@
 /* Stable database schema. UI/cache releases must never change this name. */
 export const DB_NAME = 'rosary-personal-book-v1';
 export const DECADES = Array.from({length:20},(_,i)=>String(i));
-export const blankState = () => ({schema:1,revision:0,records:{},prayers:[],decades:Object.fromEntries(DECADES.map(id=>[id,{scripture:'',prayers:[],art:null}]))});
+export const blankOpening = () => ({scripture:'',prayers:[],art:null});
+export const blankState = () => ({schema:1,revision:0,records:{},prayers:[],decades:Object.fromEntries(DECADES.map(id=>[id,{scripture:'',prayers:[],art:null}])),opening:blankOpening()});
 const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 const object=x=>x!==null&&typeof x==='object'&&!Array.isArray(x);
 const str=x=>typeof x==='string'&&x.length<=1000000;
@@ -18,7 +19,10 @@ export function validateState(s){
   check(object(r)&&Number.isSafeInteger(r.count)&&r.count>=0&&r.count<=999999&&str(r.intention)&&str(r.memo)&&(r.mystery===undefined||(Number.isInteger(r.mystery)&&r.mystery>=0&&r.mystery<4))&&(r.mysteries===undefined||(Array.isArray(r.mysteries)&&r.mysteries.length===4&&r.mysteries.every(n=>Number.isSafeInteger(n)&&n>=0&&n<=999999)&&r.mysteries.reduce((a,b)=>a+b,0)===r.count)),'달력 기록');
  }
  check(Object.keys(s.decades).length===20,'20단 구성');
- for(const id of DECADES){const d=s.decades[id];check(object(d)&&str(d.scripture)&&(d.scriptureTitle===undefined||str(d.scriptureTitle))&&(d.scriptures===undefined||(Array.isArray(d.scriptures)&&d.scriptures.length<=500&&d.scriptures.every(x=>object(x)&&idOK(x.id)&&str(x.title)&&x.title.trim()&&str(x.body)&&x.body.trim())&&new Set(d.scriptures.map(x=>x.id)).size===d.scriptures.length))&&(d.sectionOrder===undefined||(['art','prayers'].includes(d.sectionOrder)))&&Array.isArray(d.prayers)&&d.prayers.every(x=>ids.has(x))&&new Set(d.prayers).size===d.prayers.length&&(d.art===null||idOK(d.art)),'단별 데이터');}
+ const validPage=d=>object(d)&&str(d.scripture)&&(d.scriptureTitle===undefined||str(d.scriptureTitle))&&(d.scriptures===undefined||(Array.isArray(d.scriptures)&&d.scriptures.length<=500&&d.scriptures.every(x=>object(x)&&idOK(x.id)&&str(x.title)&&x.title.trim()&&str(x.body)&&x.body.trim())&&new Set(d.scriptures.map(x=>x.id)).size===d.scriptures.length))&&(d.sectionOrder===undefined||(['art','prayers'].includes(d.sectionOrder)))&&Array.isArray(d.prayers)&&d.prayers.every(x=>ids.has(x))&&new Set(d.prayers).size===d.prayers.length&&(d.art===null||idOK(d.art));
+ for(const id of DECADES)check(validPage(s.decades[id]),'단별 데이터');
+ // Old backups have no opening key. Keep them valid and migrate only on a user edit.
+ if(s.opening!==undefined)check(validPage(s.opening),'시작기도 데이터');
  return s;
 }
 export async function hashBlob(blob){return [...new Uint8Array(await crypto.subtle.digest('SHA-256',await blob.arrayBuffer()))].map(x=>x.toString(16).padStart(2,'0')).join('');}
@@ -83,16 +87,16 @@ export class PrayerStore {
   await decodeImage(stored.blob);return stored;
  }
  async saveArt(decade,file){
-  check(DECADES.includes(String(decade)),'신비 번호');
+  check(decade==='opening'||DECADES.includes(String(decade)),'신비 번호');
   // Decode/compress/hash BEFORE opening any IndexedDB write transaction.
   const blob=await prepareImage(file),asset={id:crypto.randomUUID(),blob,hash:await hashBlob(blob)};
   const estimate=await navigator.storage?.estimate?.();
   if(estimate?.quota&&estimate.quota-estimate.usage<blob.size*1.1)throw new DOMException('저장 공간 부족','QuotaExceededError');
-  return this.exclusive(async()=>{await this.writeAsset(asset);return this.commit(s=>{s.decades[decade].art=asset.id;});});
+  return this.exclusive(async()=>{await this.writeAsset(asset);return this.commit(s=>{if(decade==='opening'){if(!s.opening)s.opening=blankOpening();s.opening.art=asset.id;}else s.decades[decade].art=asset.id;});});
  }
  async backup(){return this.exclusive(async()=>{
   const s=await this.readState(),assets=[];
-  for(const id of new Set(Object.values(s.decades).map(d=>d.art).filter(Boolean))){const a=await this.getAsset(id);check(a?.blob instanceof Blob,'누락된 성화');check(await hashBlob(a.blob)===a.hash,'손상된 성화');const data=await new Promise((resolve,reject)=>{const f=new FileReader();f.onerror=()=>reject(f.error);f.onload=()=>resolve(f.result.split(',')[1]);f.readAsDataURL(a.blob);});assets.push({id,type:a.blob.type,hash:a.hash,data});}
+  for(const id of new Set([...Object.values(s.decades).map(d=>d.art),s.opening?.art].filter(Boolean))){const a=await this.getAsset(id);check(a?.blob instanceof Blob,'누락된 성화');check(await hashBlob(a.blob)===a.hash,'손상된 성화');const data=await new Promise((resolve,reject)=>{const f=new FileReader();f.onerror=()=>reject(f.error);f.onload=()=>resolve(f.result.split(',')[1]);f.readAsDataURL(a.blob);});assets.push({id,type:a.blob.type,hash:a.hash,data});}
   return {format:'rosary-personal-book',version:1,createdAt:new Date().toISOString(),state:s,assets};
  });}
  async restore(prepared){return this.exclusive(async()=>{
@@ -100,22 +104,23 @@ export class PrayerStore {
   const next=structuredClone(prepared.state),mapping=new Map();
   for(const a of prepared.assets){const newId=crypto.randomUUID();await this.writeAsset({...a,id:newId});mapping.set(a.id,newId);}
   for(const d of Object.values(next.decades))if(d.art)d.art=mapping.get(d.art);
-  return this.commit(s=>{s.records=next.records;s.prayers=next.prayers;s.decades=next.decades;});
+  if(next.opening?.art)next.opening.art=mapping.get(next.opening.art);
+  return this.commit(s=>{s.records=next.records;s.prayers=next.prayers;s.decades=next.decades;s.opening=next.opening||blankOpening();});
  });}
  // Explicit maintenance only removes unreachable staged/old blobs. Preserve the prior snapshot too.
  async compact(){return this.exclusive(()=>this.transaction(['state','assets'],'readwrite',(tx,set)=>{
-  const q=tx.objectStore('state').getAll();q.onsuccess=()=>{const keep=new Set(q.result.flatMap(s=>Object.values(s.decades).map(d=>d.art).filter(Boolean)));const c=tx.objectStore('assets').openCursor();c.onsuccess=()=>{const cur=c.result;if(cur){if(!keep.has(cur.key))cur.delete();cur.continue();}};};
+  const q=tx.objectStore('state').getAll();q.onsuccess=()=>{const keep=new Set(q.result.flatMap(s=>[...Object.values(s.decades).map(d=>d.art),s.opening?.art].filter(Boolean)));const c=tx.objectStore('assets').openCursor();c.onsuccess=()=>{const cur=c.result;if(cur){if(!keep.has(cur.key))cur.delete();cur.continue();}};};
  }));}
 }
 export async function parseBackup(text){
  let b;try{b=JSON.parse(text);}catch{throw new Error('JSON 파일을 읽을 수 없습니다.');}
  check(object(b)&&b.format==='rosary-personal-book'&&b.version===1&&Array.isArray(b.assets),'이 앱에서 만든 백업이 아닙니다');validateState(b.state);
- check(b.assets.length<=20,'성화 개수');const ids=new Set(),assets=[];
+ check(b.assets.length<=21,'성화 개수');const ids=new Set(),assets=[];
  for(const a of b.assets){
   check(object(a)&&idOK(a.id)&&!ids.has(a.id)&&['image/jpeg','image/png','image/webp'].includes(a.type)&&typeof a.data==='string'&&a.data.length<=12000000&&/^[A-Za-z0-9+/]*={0,2}$/.test(a.data)&&/^[a-f0-9]{64}$/.test(a.hash),'성화 형식');
   ids.add(a.id);let bytes;try{bytes=Uint8Array.from(atob(a.data),c=>c.charCodeAt(0));}catch{throw new Error('성화 인코딩 오류');}
   const blob=new Blob([bytes],{type:a.type});check(blob.size&&await hashBlob(blob)===a.hash,'성화 내용 또는 체크섬 오류');await decodeImage(blob);assets.push({id:a.id,hash:a.hash,blob});
  }
- const used=new Set(Object.values(b.state.decades).map(d=>d.art).filter(Boolean));check([...used].every(id=>ids.has(id))&&used.size===ids.size,'성화 참조 누락 또는 불필요한 성화');
+ const used=new Set([...Object.values(b.state.decades).map(d=>d.art),b.state.opening?.art].filter(Boolean));check([...used].every(id=>ids.has(id))&&used.size===ids.size,'성화 참조 누락 또는 불필요한 성화');
  return {state:b.state,assets};
 }

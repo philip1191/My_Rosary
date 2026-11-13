@@ -222,3 +222,9 @@ footer{margin-top:28px}
 #rosaryCompleteTitle{font-size:19px;line-height:1.6;word-break:keep-all}
 .rosary-complete-actions{display:grid;gap:10px;margin-top:22px}
 .rosary-complete-actions button{width:100%;min-height:44px}
+
+/* Shared opening-prayer stage: compact stage selector on portrait phones. */
+.decade-nav .decade-numbers{display:flex;align-items:center;justify-content:center;min-width:0;flex:1;gap:2px;}
+.decade-nav .decade-numbers .opening-stage{width:auto;min-width:61px;padding:4px 5px;font-size:12px;border-radius:18px;white-space:nowrap;}
+.decade-nav .decade-numbers .opening-stage.active{background:var(--light);border-radius:18px;color:var(--green);font-weight:700;}
+@media(max-width:420px){.decade-nav>button{min-width:51px;padding:8px 6px}.decade-nav .decade-numbers button:not(.opening-stage){width:29px;min-height:36px;padding:4px 0}.decade-nav .decade-numbers .opening-stage{min-width:56px;font-size:11px;padding:3px}.decade-nav .decade-numbers{gap:0}}
