@@ -2,9 +2,11 @@ import {collectExtras,validateExtras,restoreExtras} from './backup-extras.js';
 import {PrayerStore,blankState,blankOpening,parseBackup,explainError} from './storage.js';
 import {MYSTERIES,START_PRAYERS,DECADE_PRAYERS} from './mysteries.js';
 import {notifyBeadChange} from './rosary-alerts.js';
+import {createPrayerImageExporter} from './export-image.js';
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const localDate=(d=new Date())=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+const prayerImageExporter=createPrayerImageExporter({getAsset:id=>store.getAsset(id),logoSource:()=>document.querySelector('.brand .brand-logo')?.src||new URL('./default-header-logo.png',import.meta.url).href});
 const store=new PrayerStore();let state=blankState(),tab='calendar',selected=localDate(),month=new Date(new Date().getFullYear(),new Date().getMonth(),1),decade=0,isOpening=true,artURL=null,renderToken=0,manage=false;
 const activeKey=()=>isOpening?'opening':decade;
 const pageData=(s,key=activeKey())=>key==='opening'?(s.opening||blankOpening()):s.decades[key];
@@ -125,8 +127,17 @@ function renderCalendar(){
 function recordMysteries(r){if(Array.isArray(r.mysteries))return r.mysteries;const n=[0,0,0,0];if(Number.isInteger(r.mystery))n[r.mystery]=r.count;return n;}
 function renderRecord(){
  const r=state.records[selected]||{count:0,intention:'',memo:''},counts=recordMysteries(r),d=new Date(selected+'T12:00:00');
- $('#recordPanel').innerHTML=`<div class="record-head"><h3>${d.getMonth()+1}월 ${d.getDate()}일 <small style="font:12px system-ui;color:var(--muted)">${['일','월','화','수','목','금','토'][d.getDay()]}요일</small></h3><span class="tag">기도 기록</span></div><form id="recordForm"><p class="muted">묵주기도 단수</p>${MYSTERIES.map((m,i)=>`<label class="field">${m.name}<input class="mystery-count" data-mystery-count="${i}" type="number" min="0" max="999999" step="1" inputmode="numeric" value="${counts[i]}" required></label>`).join('')}<p class="muted">합계 <strong id="recordTotal">${r.count}</strong>단</p><label class="field">기도 지향<textarea id="recordIntention" placeholder="마음에 품은 지향을 적어 주세요">${esc(r.intention)}</textarea></label><label class="field">묵상 · 개인 메모<textarea class="memo" id="recordMemo" placeholder="오늘의 기도를 남겨 보세요">${esc(r.memo)}</textarea></label><div class="record-actions"><button type="button" class="danger quiet" id="deleteRecord">기록 삭제</button><button type="submit">다시 저장</button></div></form>`;
- $('#recordForm').oninput=()=>{const values=$$('[data-mystery-count]').map(x=>x.valueAsNumber);$('#recordTotal').textContent=values.every(Number.isSafeInteger)?values.reduce((x,y)=>x+y,0):'—';saveRecord().catch(()=>{});};$('#recordForm').onsubmit=action(async e=>{e.preventDefault();await saveRecord();clearError();renderCalendar();});
+ $('#recordPanel').innerHTML=`<div class="record-head"><h3>${d.getMonth()+1}월 ${d.getDate()}일 <small style="font:12px system-ui;color:var(--muted)">${['일','월','화','수','목','금','토'][d.getDay()]}요일</small></h3><span class="tag">기도 기록</span></div><form id="recordForm"><p class="muted">묵주기도 단수</p>${MYSTERIES.map((m,i)=>`<div class="record-mystery-field"><label class="field">${m.name}<input class="mystery-count" data-mystery-count="${i}" type="number" min="0" max="999999" step="1" inputmode="numeric" value="${counts[i]}" required></label><button type="button" class="export-record-btn" data-export-mystery="${i}" ${counts[i]>0?'':'disabled'}>내보내기</button></div>`).join('')}<p class="muted">합계 <strong id="recordTotal">${r.count}</strong>단</p><label class="field">기도 지향<textarea id="recordIntention" placeholder="마음에 품은 지향을 적어 주세요">${esc(r.intention)}</textarea></label><label class="field">묵상 · 개인 메모<textarea class="memo" id="recordMemo" placeholder="오늘의 기도를 남겨 보세요">${esc(r.memo)}</textarea></label><div class="record-actions"><button type="button" class="danger quiet" id="deleteRecord">기록 삭제</button><button type="submit">다시 저장</button></div></form>`;
+ $('#recordForm').oninput=()=>{const values=$$('[data-mystery-count]').map(x=>x.valueAsNumber);$('#recordTotal').textContent=values.every(Number.isSafeInteger)?values.reduce((x,y)=>x+y,0):'—';$$('[data-export-mystery]').forEach(b=>{b.disabled=!(Number.isSafeInteger(values[Number(b.dataset.exportMystery)])&&values[Number(b.dataset.exportMystery)]>0);});saveRecord().catch(()=>{});};$('#recordForm').onsubmit=action(async e=>{e.preventDefault();await saveRecord();clearError();renderCalendar();});
+ $$('[data-export-mystery]').forEach(button=>button.onclick=action(async()=>{
+  const groupIndex=Number(button.dataset.exportMystery);
+  if(!Number.isInteger(groupIndex)||groupIndex<0||groupIndex>=4)return;
+  await flush();
+  const count=recordMysteries(state.records[selected]||{})[groupIndex]||0;
+  if(!count){notify('내보낼 기도 기록이 없습니다.');return;}
+  const artIds=Array.from({length:5},(_,i)=>state.decades[String(groupIndex*5+i)]?.art||null);
+  await prayerImageExporter.open({date:selected,groupIndex,count,group:MYSTERIES[groupIndex],artIds});
+ }));
  $('#deleteRecord').onclick=action(async()=>{if(!confirm('선택한 날짜의 기록을 삭제할까요?'))return;await track(store.mutate(s=>{delete s.records[selected];}));clearError();renderCalendar();});
 }
 async function saveRecord(){

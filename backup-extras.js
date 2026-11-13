@@ -1,6 +1,7 @@
 // Full user-data backup extension. Version-1 prayer backups remain importable.
 const APPEARANCE_KEY='rosary-appearance-v1';
 const ART_ROSARY_POSITION_KEY='my-rosary-art-rosary-position-v1';
+const EXPORT_IMAGE_PREFS_KEY='my-rosary-image-export-v1';
 const MUSIC_DB='rosary-prayer-music-v1';
 const MAX_AUDIO_BYTES=500*1024*1024;
 function req(q){return new Promise((resolve,reject)=>{q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error)})}
@@ -12,26 +13,37 @@ async function digest(blob){return [...new Uint8Array(await crypto.subtle.digest
 export async function collectExtras(){
  const appearance=JSON.parse(localStorage.getItem(APPEARANCE_KEY)||'null');
  const artRosaryPosition=JSON.parse(localStorage.getItem(ART_ROSARY_POSITION_KEY)||'null');
+ const exportImagePrefs=JSON.parse(localStorage.getItem(EXPORT_IMAGE_PREFS_KEY)||'null');
  const logoDB=await open('rosary-appearance-assets',1,db=>{if(!db.objectStoreNames.contains('images'))db.createObjectStore('images')});
  let logo=null;try{const b=await req(logoDB.transaction('images').objectStore('images').get('logo'));if(b){logo={type:b.type,data:await toBase64(b),hash:await digest(b)}}}finally{logoDB.close()}
  const db=await open(MUSIC_DB,1,db=>{if(!db.objectStoreNames.contains('lists'))db.createObjectStore('lists',{keyPath:'id'});if(!db.objectStoreNames.contains('tracks'))db.createObjectStore('tracks',{keyPath:'id'})});
  try{const lists=await readAll(db,'lists'),tracks=await readAll(db,'tracks');let total=0;const packed=[];
   for(const t of tracks){if(!(t.blob instanceof Blob))throw Error('음악 파일이 누락되었습니다: '+t.name);total+=t.blob.size;if(total>MAX_AUDIO_BYTES)throw Error('음악 파일이 500MB를 초과합니다. 파일을 줄인 뒤 백업해 주세요.');const {blob,...meta}=t;packed.push({...meta,file:{type:blob.type,data:await toBase64(blob),hash:await digest(blob)}})}
-  return {appearance,artRosaryPosition,logo,music:{lists,tracks:packed}};
+  return {appearance,artRosaryPosition,exportImagePrefs,logo,music:{lists,tracks:packed}};
  }finally{db.close()}
 }
 export async function validateExtras(extras){
  if(!extras||typeof extras!=='object')throw Error('추가 백업 데이터가 없습니다.');
- const {appearance,artRosaryPosition,logo,music}=extras;
+ const {appearance,artRosaryPosition,exportImagePrefs,logo,music}=extras;
  if(appearance!==null&&(typeof appearance!=='object'||Array.isArray(appearance)))throw Error('꾸미기 설정이 잘못되었습니다.');
  if(artRosaryPosition!==undefined&&artRosaryPosition!==null&&(!Number.isFinite(artRosaryPosition.x)||!Number.isFinite(artRosaryPosition.y)||artRosaryPosition.x<0||artRosaryPosition.x>1||artRosaryPosition.y<0||artRosaryPosition.y>1))throw Error('가상 묵주 위치 설정이 잘못되었습니다.');
+ if(exportImagePrefs!==undefined&&exportImagePrefs!==null){
+  if(!exportImagePrefs||typeof exportImagePrefs!=='object'||Array.isArray(exportImagePrefs)||JSON.stringify(exportImagePrefs).length>20000)throw Error('기도 이미지 내보내기 설정 형식 오류');
+  if(exportImagePrefs.message!==undefined&&(typeof exportImagePrefs.message!=='string'||exportImagePrefs.message.length>60))throw Error('기도 이미지 문구 형식 오류');
+  if(exportImagePrefs.art!==undefined){
+   if(!exportImagePrefs.art||typeof exportImagePrefs.art!=='object'||Array.isArray(exportImagePrefs.art))throw Error('성화 배치 형식 오류');
+   for(const [k,v] of Object.entries(exportImagePrefs.art)){
+    if(!/^[0-3]$/.test(k)||!Array.isArray(v?.ids)||v.ids.length!==5||!v.ids.every(x=>x===null||typeof x==='string')||!Array.isArray(v.transforms)||v.transforms.length!==5||!v.transforms.every(t=>t&&Number.isFinite(t.zoom)&&t.zoom>=.35&&t.zoom<=4&&Number.isFinite(t.dx)&&Math.abs(t.dx)<=3&&Number.isFinite(t.dy)&&Math.abs(t.dy)<=3))throw Error('성화 배치 설정 오류');
+   }
+  }
+ }
  let logoBlob=null;
  if(logo!==null){if(!logo||!['image/png','image/jpeg','image/webp'].includes(logo.type))throw Error('로고 형식 오류');logoBlob=fromBase64(logo.data,logo.type);if(logoBlob.size>15*1024*1024||await digest(logoBlob)!==logo.hash)throw Error('로고 데이터 손상')}
  if(!music||!Array.isArray(music.lists)||!Array.isArray(music.tracks))throw Error('음악 목록 형식 오류');
  const listIds=new Set();for(const l of music.lists){if(!l||typeof l.id!=='string'||typeof l.name!=='string'||listIds.has(l.id))throw Error('음악 목록 오류');listIds.add(l.id)}
  const trackIds=new Set(),tracks=[];let total=0;
  for(const t of music.tracks){if(!t||typeof t.id!=='string'||trackIds.has(t.id)||!listIds.has(t.listId)||typeof t.name!=='string'||!t.file||typeof t.file.type!=='string')throw Error('음악 정보 오류');trackIds.add(t.id);const blob=fromBase64(t.file.data,t.file.type);total+=blob.size;if(total>MAX_AUDIO_BYTES||await digest(blob)!==t.file.hash)throw Error('음악 파일 손상 또는 용량 초과');const {file,...meta}=t;tracks.push({...meta,blob})}
- return {appearance,artRosaryPosition,logoBlob,lists:music.lists,tracks};
+ return {appearance,artRosaryPosition,exportImagePrefs,logoBlob,lists:music.lists,tracks};
 }
 function replaceMusic(db,lists,tracks){return new Promise((resolve,reject)=>{const tx=db.transaction(['lists','tracks'],'readwrite');tx.objectStore('lists').clear();tx.objectStore('tracks').clear();for(const l of lists)tx.objectStore('lists').put(l);for(const t of tracks)tx.objectStore('tracks').put(t);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||Error('음악 복원 실패'))})}
 export async function restoreExtras(prepared){
@@ -41,6 +53,10 @@ export async function restoreExtras(prepared){
  try{await new Promise((resolve,reject)=>{const tx=logoDB.transaction('images','readwrite');if(prepared.logoBlob)tx.objectStore('images').put(prepared.logoBlob,'logo');else tx.objectStore('images').delete('logo');tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)})}finally{logoDB.close()}
  if(prepared.appearance===null)localStorage.removeItem(APPEARANCE_KEY);else localStorage.setItem(APPEARANCE_KEY,JSON.stringify(prepared.appearance));
  // Older backups have no rosary position: preserve this device's current preference.
+ if(prepared.exportImagePrefs!==undefined){
+  if(prepared.exportImagePrefs===null)localStorage.removeItem(EXPORT_IMAGE_PREFS_KEY);
+  else localStorage.setItem(EXPORT_IMAGE_PREFS_KEY,JSON.stringify(prepared.exportImagePrefs));
+ }
  if(prepared.artRosaryPosition!==undefined){
   if(prepared.artRosaryPosition===null)localStorage.removeItem(ART_ROSARY_POSITION_KEY);
   else localStorage.setItem(ART_ROSARY_POSITION_KEY,JSON.stringify(prepared.artRosaryPosition));
