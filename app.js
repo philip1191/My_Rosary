@@ -11,9 +11,17 @@ const pageData=(s,key=activeKey())=>key==='opening'?(s.opening||blankOpening()):
 const editablePage=(s,key)=>key==='opening'?(s.opening||(s.opening=blankOpening())):s.decades[key];
 // Wake lock is transient and never stored in the prayer database.
 let wakeLock=null,wakeRequest=0,lightboxDecade=0,lightboxIsOpening=false,lightboxURL=null,lightboxSequence=0,lightboxTouch=null;
-// Artwork rosary positions are transient: hiding controls does not change them.
-// Closing the viewer discards them; navigation starts each destination fresh.
-let artRosaryProgress={};
+// Both rosaries use the same transient bead index per page (no IndexedDB writes).
+// The current page keeps its place when the artwork viewer opens or closes.
+// Navigating to another page starts that page with its normal initial bead.
+let rosaryProgress={};
+const rosaryProgressKey=(opening,id)=>opening?'opening':`decade:${id}`;
+const getRosaryProgress=(opening,id)=>{
+ const n=rosaryProgress[rosaryProgressKey(opening,id)];
+ return Number.isInteger(n)?n:0;
+};
+const setRosaryProgress=(opening,id,index)=>{rosaryProgress[rosaryProgressKey(opening,id)]=index;};
+let syncMainRosaryDisplay=()=>{};
 const AUTO_RECORD_KEY='my-rosary-auto-record-v1';
 function autoRecordEnabled(){return localStorage.getItem(AUTO_RECORD_KEY)!=='off';}
 async function completeMystery(id){
@@ -41,7 +49,7 @@ async function completeChoice(choice){
  // The other choices intentionally leave the viewer as before.
  if(choice==='next'&&artworkOpen){
   pendingRosaryLanding=null;
-  artRosaryProgress={};
+  rosaryProgress={};
   await showLightboxArt((id+1)%20);
   return;
  }
@@ -132,21 +140,28 @@ async function saveRecord(){
 function rosaryHTML(start,finalDecade=false){return `<button class="rosary" data-final-decade="${finalDecade}" data-rosary="${start?'start':'decade'}" aria-label="${start?'시작 묵주':'일반 묵주'}"><span class="beads"></span><span class="prayer-name"></span></button>`;}
 let pendingRosaryLanding=null;
 function bindRosaries(){
- $$('.rosary').forEach(b=>{const start=b.dataset.rosary==='start',finalDecade=b.dataset.finalDecade==='true',names=start?START_PRAYERS:(finalDecade?[...DECADE_PRAYERS,'(성모찬송)성호경']:DECADE_PRAYERS),gloryIndex=start?START_PRAYERS.length-1:DECADE_PRAYERS.length-1;let index=pendingRosaryLanding===(start?'start':'decade')?0:(pendingRosaryLanding==='last'&&!start||pendingRosaryLanding==='last-start'&&start)?names.length-1:0,down=null,suppress=false;
+ syncMainRosaryDisplay=()=>{};
+ $$('.rosary').forEach(b=>{const start=b.dataset.rosary==='start',finalDecade=b.dataset.finalDecade==='true',names=start?START_PRAYERS:(finalDecade?[...DECADE_PRAYERS,'(성모찬송)성호경']:DECADE_PRAYERS),gloryIndex=start?START_PRAYERS.length-1:DECADE_PRAYERS.length-1;let index=pendingRosaryLanding===(start?'start':'decade')?0:(pendingRosaryLanding==='last'&&!start||pendingRosaryLanding==='last-start'&&start)?names.length-1:getRosaryProgress(start,decade),down=null,suppress=false;
+  index=Math.max(0,Math.min(names.length-1,index));
+  setRosaryProgress(start,decade,index);
   const paint=()=>{b.querySelector('.beads').innerHTML=names.map((name,i)=>`<i class="bead ${name!=='성모송'?'big':''} ${(start&&i===0)||(finalDecade&&i===names.length-1)?'cross-bead':''} ${i===index?'current':i<index?'done':''}">${(start&&i===0)||(finalDecade&&i===names.length-1)?'✝︎':''}</i>`).join('');b.querySelector('.prayer-name').textContent=start&&index===0?'성호경 · 사도신경':names[index];b.setAttribute('aria-label',`${start?'시작 묵주':'일반 묵주'} ${index+1}/${names.length} ${names[index]}. 좌우로 밀어 기도 이동`);};
   const step=n=>{
    if(index===0&&n<0){notifyBeadChange(false,false,-1);if(start){pendingRosaryLanding='last';moveDecade(decade-1).catch(error);}else if(decade%5===0){pendingRosaryLanding='last-start';moveOpening().catch(error);}else{pendingRosaryLanding='last';moveDecade(decade-1).catch(error);}return;}
    if(index===names.length-1&&n>0){notifyBeadChange(false,false,1);if(start){pendingRosaryLanding='decade';moveDecade(decade).catch(error);}else if(decade%5===4){completeMystery(decade).catch(error);}else{pendingRosaryLanding='decade';moveDecade(decade+1).catch(error);}return;}
-   const previous=index;index=Math.max(0,Math.min(names.length-1,index+n));paint();if(index!==previous)notifyBeadChange(index===gloryIndex,finalDecade&&index===names.length-1,n);
+   const previous=index;index=Math.max(0,Math.min(names.length-1,index+n));
+   if(index!==previous){setRosaryProgress(start,decade,index);paint();notifyBeadChange(index===gloryIndex,finalDecade&&index===names.length-1,n);}
   };
   b.onpointerdown=e=>{down={y:e.clientY,x:e.clientX,id:e.pointerId};suppress=false;b.setPointerCapture(e.pointerId);};
   b.onpointerup=e=>{if(!down)return;const dy=e.clientY-down.y,dx=e.clientX-down.x;if(Math.abs(dx)>24&&Math.abs(dx)>=Math.abs(dy)){step(dx<0?1:-1);suppress=true;}down=null;};b.onpointercancel=()=>{down=null;suppress=true;};
-  b.onclick=e=>e.preventDefault();b.onkeydown=e=>{if(['ArrowLeft','ArrowRight'].includes(e.key)){e.preventDefault();step(e.key==='ArrowLeft'?-1:1);}};paint();
+  b.onclick=e=>e.preventDefault();b.onkeydown=e=>{if(['ArrowLeft','ArrowRight'].includes(e.key)){e.preventDefault();step(e.key==='ArrowLeft'?-1:1);}};
+  // When the expanded artwork rosary advances, update this already-mounted rosary too.
+  syncMainRosaryDisplay=()=>{index=Math.max(0,Math.min(names.length-1,getRosaryProgress(start,decade)));paint();};
+  paint();
  });
  pendingRosaryLanding=null;
 }
-async function moveDecade(id){await flush();decade=(id+20)%20;isOpening=false;manage=false;render();}
-async function moveOpening(group=Math.floor(decade/5)){await flush();decade=group*5;isOpening=true;manage=false;render();}
+async function moveDecade(id){await flush();const target=(id+20)%20;if(isOpening||decade!==target)rosaryProgress={};decade=target;isOpening=false;manage=false;render();}
+async function moveOpening(group=Math.floor(decade/5)){await flush();const target=group*5;if(!isOpening||decade!==target)rosaryProgress={};decade=target;isOpening=true;manage=false;render();}
 async function movePreviousPage(){if(isOpening)return moveDecade(decade-1);if(decade%5===0)return moveOpening();return moveDecade(decade-1);}
 async function moveNextPage(){return isOpening?moveDecade(decade):moveDecade(decade+1);}
 function renderMystery(){
@@ -158,7 +173,7 @@ function renderMystery(){
  artButton.addEventListener('pointerdown',e=>{if(e.isPrimary){artGesture={x:e.clientX,y:e.clientY};artSwiped=false;}});
  artButton.addEventListener('pointerup',e=>{if(!artGesture)return;const dx=e.clientX-artGesture.x,dy=e.clientY-artGesture.y;artGesture=null;if(Math.abs(dx)>45&&Math.abs(dx)>Math.abs(dy)*1.25){artSwiped=true;pendingRosaryLanding=null;(dx<0?moveNextPage():movePreviousPage()).catch(error);}});
  artButton.addEventListener('pointercancel',()=>{artGesture=null;});
- artButton.onclick=()=>{if(artSwiped){artSwiped=false;return;}if(artURL){artRosaryProgress={};lightboxDecade=decade;lightboxIsOpening=isOpening;$('#lightbox').classList.remove('controls-hidden');$('#lightbox').showModal();showLightboxArt(decade,isOpening);syncWakeLock();}else if(!d.art)chooseImage();};
+ artButton.onclick=()=>{if(artSwiped){artSwiped=false;return;}if(artURL){lightboxDecade=decade;lightboxIsOpening=isOpening;$('#lightbox').classList.remove('controls-hidden');$('#lightbox').showModal();showLightboxArt(decade,isOpening);syncWakeLock();}else if(!d.art)chooseImage();};
  if(d.art){loadArt(d.art,renderToken).catch(error);$('#deleteArt').onclick=action(async()=>{if(confirm('이 단의 성화를 삭제할까요?')){const id=activeKey();await track(store.mutate(s=>{editablePage(s,id).art=null;}));render();}});}
  $('#toggleScripture').onclick=()=>{const area=$('#scriptureContents');area.hidden=!area.hidden;$('#toggleScripture').setAttribute('aria-expanded',String(!area.hidden));};
  renderScriptures();
@@ -206,11 +221,22 @@ $('#imageInput').onchange=action(async e=>{const f=e.target.files[0];if(!f)retur
 async function loadArt(id,token){const a=await store.getAsset(id);if(!a?.blob)throw new Error('저장된 성화를 읽지 못했습니다. 백업 파일을 확인해 주세요.');if(token!==renderToken)return;artURL=URL.createObjectURL(a.blob);const img=document.createElement('img');img.alt=isOpening?'시작기도 성화':`${MYSTERIES[Math.floor(decade/5)].name} ${decade%5+1}단 성화`;img.src=artURL;img.onerror=()=>error(new Error('저장된 성화를 화면에 표시하지 못했습니다.'));$('#artDisplay').replaceChildren(img);}
 function prayerAccordion(p,assigned=false){return `<article class="${assigned?'assigned-prayer':'panel prayer-card'} prayer-sortable" data-prayer="${esc(p.id)}"><details class="prayer-fold"><summary class="prayer-fold-title">${esc(p.title)}<span class="fold-chevron" aria-hidden="true">⌄</span></summary><div class="prose">${esc(p.body)}</div></details>${assigned?'':`<div class="actions"><button data-edit-prayer="${esc(p.id)}">수정</button><button data-delete-prayer="${esc(p.id)}" class="danger quiet">삭제</button></div>`}</article>`;}
 function renderAssigned(){const list=$('#assignedList');list.innerHTML=pageData(state).prayers.map(id=>{const p=state.prayers.find(p=>p.id===id);return p?prayerAccordion(p,true):'';}).join('');bindDrag(list,'assigned');}
-function scopeHTML(){if(isOpening)return '<p class="muted">이 기도문은 네 신비의 공통 시작기도에만 배정됩니다.</p>';return '<fieldset style="border:0;padding:0;margin:0"><legend class="muted" style="font-size:11px;margin-top:12px">적용 범위</legend><div class="scope"><label><input type="radio" name="scope" value="all" checked> 전체 20단에 적용</label><label><input type="radio" name="scope" value="one"> 이 단에만 적용</label></div></fieldset>';}
-function assign(s,id,all,target){if(target==='opening'){const opening=editablePage(s,'opening');if(!opening.prayers.includes(id))opening.prayers.push(id);return;}for(const [key,d] of Object.entries(s.decades))if(all||Number(key)===target)if(!d.prayers.includes(id))d.prayers.push(id);}
+function scopeHTML(){if(isOpening)return '<p class="muted">이 기도문은 네 신비의 공통 시작기도에만 배정됩니다.</p>';return '<fieldset style="border:0;padding:0;margin:0"><legend class="muted" style="font-size:11px;margin-top:12px">적용 범위</legend><div class="scope"><label><input type="radio" name="scope" value="all" checked> 20단에 적용</label><label><input type="radio" name="scope" value="same"> 이 단 전체에 적용</label><label><input type="radio" name="scope" value="one"> 이 단에만 적용</label></div></fieldset>';}
+function assign(s,id,scope,target){
+ if(target==='opening'){const opening=editablePage(s,'opening');if(!opening.prayers.includes(id))opening.prayers.push(id);return;}
+ const current=Number(target);
+ if(!Number.isInteger(current)||current<0||current>=20)throw new Error('기도문 배정 단 번호가 올바르지 않습니다.');
+ if(!['all','same','one'].includes(scope))throw new Error('적용 범위를 선택해 주세요.');
+ for(const [key,d] of Object.entries(s.decades)){
+  const n=Number(key);
+  if(scope==='all'||(scope==='same'&&n%5===current%5)||(scope==='one'&&n===current)){
+   if(!d.prayers.includes(id))d.prayers.push(id);
+  }
+ }
+}
 function renderManage(){
- const area=$('#manageArea');area.innerHTML=`<div class="manage-panel"><label class="field">기존 기도문<select id="prayerChoice"><option value="">기도문 선택</option>${state.prayers.map(p=>`<option value="${p.id}">${esc(p.title)}</option>`).join('')}</select></label>${scopeHTML()}<div class="actions"><button id="attachPrayer" class="primary">선택한 기도문 추가</button><button id="newAssigned">새 기도문 입력</button></div><p class="drag-hint">기도문을 길게 눌러 위아래로 옮기세요. ${isOpening?'네 신비의 시작기도에 공통 적용됩니다.':'현재 단에만 저장됩니다.'}</p>${pageData(state).prayers.map(id=>{const p=state.prayers.find(p=>p.id===id);return `<div class="manage-row"><span>${esc(p.title)}</span><div class="actions"><button data-remove="${id}" data-scope="one">${isOpening?'시작기도에서 제거':'이 단에서 제거'}</button>${isOpening?'':`<button data-remove="${id}" data-scope="all">20단에서 제거</button>`}</div></div>`;}).join('')}</div>`;
- $('#attachPrayer').onclick=action(async()=>{const id=$('#prayerChoice').value;if(!id)throw new Error('추가할 기도문을 선택해 주세요.');const all=!isOpening&&$('#manageArea input[name=scope]:checked').value==='all',target=activeKey();await track(store.mutate(s=>assign(s,id,all,target)));renderAssigned();renderManage();});
+ const area=$('#manageArea');area.innerHTML=`<div class="manage-panel"><label class="field">기존 기도문<select id="prayerChoice"><option value="">기도문 선택</option>${state.prayers.map(p=>`<option value="${p.id}">${esc(p.title)}</option>`).join('')}</select></label>${scopeHTML()}<div class="actions"><button id="attachPrayer" class="primary">선택한 기도문 추가</button><button id="newAssigned">새 기도문 입력</button></div><p class="drag-hint">기도문을 길게 눌러 위아래로 옮기세요. ${isOpening?'네 신비의 시작기도에 공통 적용됩니다.':'선택한 적용 범위의 단에 배정됩니다.'}</p>${pageData(state).prayers.map(id=>{const p=state.prayers.find(p=>p.id===id);return `<div class="manage-row"><span>${esc(p.title)}</span><div class="actions"><button data-remove="${id}" data-scope="one">${isOpening?'시작기도에서 제거':'이 단에서 제거'}</button>${isOpening?'':`<button data-remove="${id}" data-scope="all">20단에서 제거</button>`}</div></div>`;}).join('')}</div>`;
+ $('#attachPrayer').onclick=action(async()=>{const id=$('#prayerChoice').value;if(!id)throw new Error('추가할 기도문을 선택해 주세요.');const scope=isOpening?'one':$('#manageArea input[name=scope]:checked').value,target=activeKey();await track(store.mutate(s=>assign(s,id,scope,target)));renderAssigned();renderManage();});
  $('#newAssigned').onclick=()=>editPrayer(null,true);
  $$('[data-remove]').forEach(b=>b.onclick=action(async()=>{const id=b.dataset.remove,all=b.dataset.scope==='all',target=activeKey();if(all&&!confirm('전체 20단에서 이 기도문을 제거할까요? 원본은 기도문 탭에 남습니다.'))return;await track(store.mutate(s=>{if(target==='opening')editablePage(s,'opening').prayers=editablePage(s,'opening').prayers.filter(x=>x!==id);else for(const [key,d] of Object.entries(s.decades))if(all||Number(key)===target)d.prayers=d.prayers.filter(x=>x!==id);}));renderAssigned();renderManage();}));
 }
@@ -247,7 +273,7 @@ $('#editor').addEventListener('cancel',e=>{if($('#saveEditor').disabled)e.preven
 $('#editorForm').onsubmit=async e=>{e.preventDefault();$('#saveEditor').disabled=true;clearError();try{await editorAction();$('#editor').close();}catch(err){error(err);let message=$('#editorError');if(!message){message=document.createElement('p');message.id='editorError';message.className='notice error';message.setAttribute('role','alert');$('#editorBody').append(message);}message.textContent=explainError(err);}finally{$('#saveEditor').disabled=false;}};
 function editPrayer(id=null,attach=false){
  const p=state.prayers.find(p=>p.id===id)||{title:'',body:''},target=activeKey();
- openEditor(id?'기도문 수정':'새 기도문',`<label class="field">제목<input id="prayerTitle" required value="${esc(p.title)}"></label><label class="field">본문<textarea id="prayerBody" required>${esc(p.body)}</textarea></label>${attach?scopeHTML():''}`,async()=>{const title=$('#prayerTitle').value.trim(),body=$('#prayerBody').value.trim();if(!title||!body)throw new Error('제목과 본문을 입력해 주세요.');const pid=id||crypto.randomUUID(),all=attach&&target!=='opening'&&$('#editor input[name=scope]:checked').value==='all';await track(store.mutate(s=>{const found=s.prayers.find(p=>p.id===pid);if(found){found.title=title;found.body=body;}else s.prayers.push({id:pid,title,body});if(attach)assign(s,pid,all,target);}));if(tab==='prayers')renderPrayers();else{renderAssigned();renderManage();}});
+ openEditor(id?'기도문 수정':'새 기도문',`<label class="field">제목<input id="prayerTitle" required value="${esc(p.title)}"></label><label class="field">본문<textarea id="prayerBody" required>${esc(p.body)}</textarea></label>${attach?scopeHTML():''}`,async()=>{const title=$('#prayerTitle').value.trim(),body=$('#prayerBody').value.trim();if(!title||!body)throw new Error('제목과 본문을 입력해 주세요.');const pid=id||crypto.randomUUID(),scope=attach&&target!=='opening'?$('#editor input[name=scope]:checked').value:'one';await track(store.mutate(s=>{const found=s.prayers.find(p=>p.id===pid);if(found){found.title=title;found.body=body;}else s.prayers.push({id:pid,title,body});if(attach)assign(s,pid,scope,target);}));if(tab==='prayers')renderPrayers();else{renderAssigned();renderManage();}});
 }
 async function showLightboxArt(id,opening=false){
  const seq=++lightboxSequence,entry=pageData(state,opening?'opening':id);
@@ -284,7 +310,7 @@ async function showLightboxArt(id,opening=false){
 // Ask supported browsers to use a dark system bar while artwork is enlarged.
 // Restore the current app theme on closing; unsupported browsers keep their own bars.
 function artRosaryNames(start,id){return start?START_PRAYERS:(id%5===4?[...DECADE_PRAYERS,'(성모찬송)성호경']:DECADE_PRAYERS);}
-function artRosaryIndex(start,id){const key=start?'opening':`${id}:decade`,n=Number(artRosaryProgress[key]);return Number.isInteger(n)?Math.max(0,Math.min(artRosaryNames(start,id).length-1,n)):0;}
+function artRosaryIndex(start,id){const n=getRosaryProgress(start,id);return Math.max(0,Math.min(artRosaryNames(start,id).length-1,n));}
 function renderArtRosaries(){
  const wrap=$('#artRosaries');if(!wrap)return;
  wrap.innerHTML=lightboxIsOpening?'<button type="button" class="art-rosary-bead" data-art-rosary="start" aria-label="시작 기도 구슬"></button>':'<button type="button" class="art-rosary-bead" data-art-rosary="decade" aria-label="단 기도 구슬"></button>'; 
@@ -301,7 +327,8 @@ function stepArtRosary(start,direction){
  if(direction>0&&index===names.length-1){notifyBeadChange(false,false,1);if(start)advanceArt(1);else if(id%5===4)completeMystery(id).catch(error);else advanceArt(1);return;}
  if(direction<0&&index===0){notifyBeadChange(false,false,-1);advanceArt(-1,'last');return;}
  const next=index+(direction>0?1:-1);
- artRosaryProgress[start?'opening':`${id}:decade`]=next;
+ setRosaryProgress(start,id,next);
+ syncMainRosaryDisplay();
  notifyBeadChange(next===(start?START_PRAYERS.length-1:DECADE_PRAYERS.length-1),!start&&id%5===4&&next===names.length-1,direction);
  renderArtRosaries();
 }
@@ -318,8 +345,8 @@ function advanceArt(step,landing='first'){
  if(lightboxIsOpening){next=step>0?lightboxDecade:(lightboxDecade+19)%20;}
  else if(step<0&&lightboxDecade%5===0){next=lightboxDecade;opening=true;}
  else next=(lightboxDecade+step+20)%20;
- artRosaryProgress={};
- if(landing==='last'){const key=opening?'opening':`${next}:decade`;artRosaryProgress[key]=artRosaryNames(opening,next).length-1;}
+ rosaryProgress={};
+ if(landing==='last')setRosaryProgress(opening,next,artRosaryNames(opening,next).length-1);
  showLightboxArt(next,opening);
 }
 // Image gestures: pinch to zoom, drag while zoomed, swipe between artworks at 1x.
@@ -372,7 +399,7 @@ $('#lightbox').addEventListener('touchend',e=>{
 $('#lightbox').addEventListener('touchcancel',()=>{pinchStart=null;dragStart=null;lightboxTouch=null;touchWasMulti=false;cancelArtTap();});
 $('#lightbox').addEventListener('keydown',e=>{if(e.key==='ArrowLeft'){e.preventDefault();advanceArt(-1);}if(e.key==='ArrowRight'){e.preventDefault();advanceArt(1);}});
 $('#closeLightbox').onclick=()=>$('#lightbox').close();
-$('#lightbox').addEventListener('close',()=>{artRosaryProgress={};const target=lightboxDecade,targetOpening=lightboxIsOpening;lightboxSequence++;$('#largeArt').removeAttribute('src');if(lightboxURL)URL.revokeObjectURL(lightboxURL);lightboxURL=null;resetArtZoom();cancelArtTap();lastArtTap=0;$('#lightbox').classList.remove('controls-hidden');artBeadTouch=null;if(tab==='mysteries'&&(decade!==target||isOpening!==targetOpening)){decade=target;isOpening=targetOpening;manage=false;render();window.scrollTo(0,0);}syncWakeLock();});
+$('#lightbox').addEventListener('close',()=>{const target=lightboxDecade,targetOpening=lightboxIsOpening;lightboxSequence++;$('#largeArt').removeAttribute('src');if(lightboxURL)URL.revokeObjectURL(lightboxURL);lightboxURL=null;resetArtZoom();cancelArtTap();lastArtTap=0;$('#lightbox').classList.remove('controls-hidden');artBeadTouch=null;if(tab==='mysteries'&&(decade!==target||isOpening!==targetOpening)){decade=target;isOpening=targetOpening;manage=false;render();window.scrollTo(0,0);}else if(tab==='mysteries'){syncMainRosaryDisplay();}syncWakeLock();});
 $('#lightbox').addEventListener('cancel',()=>{lightboxTouch=null;});
 $('#lightbox').addEventListener('click',e=>{if(e.target.closest('button'))return;if(Date.now()<ignoreMouseClickUntil)return;registerArtTap();});
 function download(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);}
