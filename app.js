@@ -319,8 +319,9 @@ function renderArtRosaries(){
   const name=start&&i===0?'성호경 · 사도신경':names[i];
   const hailMaryNumber=names[i]==='성모송'?(start?i-1:i):null;
   b.innerHTML=`<span class="art-rosary-arrow" aria-hidden="true">↑</span><span class="art-rosary-symbol ${cross?'art-rosary-cross':names[i]==='성모송'?'art-rosary-small':'art-rosary-large'}" aria-hidden="true">${cross?'✝':hailMaryNumber??''}</span><span class="art-rosary-prayer">${name}</span>`;
-  b.setAttribute('aria-label',`${name}, ${i+1}/${names.length}. 위아래로 밀어 이동`);
+  b.setAttribute('aria-label',`${name}, ${i+1}/${names.length}. 위아래로 밀어 기도, 길게 눌러 위치 이동`);
  });
+ if(!artBeadTouch)requestAnimationFrame(()=>{if($('#lightbox').open&&!artBeadTouch)applyArtRosaryPosition();});
 }
 function stepArtRosary(start,direction){
  const id=lightboxDecade,names=artRosaryNames(start,id),index=artRosaryIndex(start,id);
@@ -333,13 +334,87 @@ function stepArtRosary(start,direction){
  renderArtRosaries();
 }
 const artRosaryWrap=$('#artRosaries');
+// The opening, ordinary and final-decade art rosaries share one saved position.
+// Position is a viewport-relative ratio, so it also survives device rotation.
+const ART_ROSARY_POSITION_KEY='my-rosary-art-rosary-position-v1';
+function validArtRosaryPosition(p){return !!p&&typeof p==='object'&&Number.isFinite(p.x)&&Number.isFinite(p.y)&&p.x>=0&&p.x<=1&&p.y>=0&&p.y<=1;}
+function readArtRosaryPosition(){
+ try{const raw=localStorage.getItem(ART_ROSARY_POSITION_KEY);const p=raw?JSON.parse(raw):null;return validArtRosaryPosition(p)?p:null;}
+ catch(_){return null;}
+}
+let artRosaryPosition=readArtRosaryPosition();
+function artRosaryBounds(){
+ const viewer=$('#lightbox');
+ const xSpace=Math.max(0,viewer.clientWidth-artRosaryWrap.offsetWidth);
+ const ySpace=Math.max(0,viewer.clientHeight-artRosaryWrap.offsetHeight);
+ const xInset=Math.min(12,xSpace/2),yInset=Math.min(12,ySpace/2);
+ return {minX:xInset,maxX:xSpace-xInset,minY:yInset,maxY:ySpace-yInset};
+}
+const clampArt=(n,lo,hi)=>Math.min(hi,Math.max(lo,n));
+function setArtRosaryPixels(x,y){
+ const b=artRosaryBounds();
+ artRosaryWrap.style.left=`${clampArt(x,b.minX,b.maxX)}px`;
+ artRosaryWrap.style.top=`${clampArt(y,b.minY,b.maxY)}px`;
+ artRosaryWrap.style.right='auto';artRosaryWrap.style.bottom='auto';
+}
+function applyArtRosaryPosition(){
+ if(!artRosaryPosition){artRosaryWrap.style.left='';artRosaryWrap.style.top='';artRosaryWrap.style.right='';artRosaryWrap.style.bottom='';return;}
+ const b=artRosaryBounds();
+ setArtRosaryPixels(b.minX+(b.maxX-b.minX)*artRosaryPosition.x,b.minY+(b.maxY-b.minY)*artRosaryPosition.y);
+}
+function saveArtRosaryPosition(){
+ const b=artRosaryBounds(),rect=artRosaryWrap.getBoundingClientRect(),outer=$('#lightbox').getBoundingClientRect();
+ const x=rect.left-outer.left,y=rect.top-outer.top;
+ artRosaryPosition={x:b.maxX===b.minX?0:(clampArt(x,b.minX,b.maxX)-b.minX)/(b.maxX-b.minX),y:b.maxY===b.minY?0:(clampArt(y,b.minY,b.maxY)-b.minY)/(b.maxY-b.minY)};
+ try{localStorage.setItem(ART_ROSARY_POSITION_KEY,JSON.stringify(artRosaryPosition));}
+ catch(_){notify('가상 묵주 위치를 영구 저장하지 못했습니다. 브라우저 저장소를 확인해 주세요.');}
+}
 let artBeadTouch=null;
-artRosaryWrap.addEventListener('touchstart',e=>{const b=e.target.closest('[data-art-rosary]');if(!b||e.touches.length!==1)return;artBeadTouch={id:b.dataset.artRosary,y:e.touches[0].clientY,x:e.touches[0].clientX};e.stopPropagation();},{passive:true});
-artRosaryWrap.addEventListener('touchmove',e=>{if(artBeadTouch){e.preventDefault();e.stopPropagation();}},{passive:false});
-artRosaryWrap.addEventListener('touchend',e=>{if(!artBeadTouch)return;const t=e.changedTouches[0],dy=t.clientY-artBeadTouch.y,dx=t.clientX-artBeadTouch.x;if(Math.abs(dy)>24&&Math.abs(dy)>Math.abs(dx)){stepArtRosary(artBeadTouch.id==='start',dy<0?1:-1);}artBeadTouch=null;ignoreMouseClickUntil=Date.now()+650;e.stopPropagation();},{passive:false});
-artRosaryWrap.addEventListener('touchcancel',e=>{artBeadTouch=null;e.stopPropagation();});
-artRosaryWrap.addEventListener('click',e=>{e.stopPropagation();});
+function stopArtRosaryHold(){if(artBeadTouch?.timer){clearTimeout(artBeadTouch.timer);artBeadTouch.timer=null;}}
+artRosaryWrap.addEventListener('pointerdown',e=>{
+ const button=e.target.closest('[data-art-rosary]');
+ if(!button||e.isPrimary===false||(e.pointerType==='mouse'&&e.button!==0))return;
+ stopArtRosaryHold();
+ const touch={pointerId:e.pointerId,id:button.dataset.artRosary,x:e.clientX,y:e.clientY,dragging:false,timer:null,originX:0,originY:0};
+ artBeadTouch=touch;
+ touch.timer=setTimeout(()=>{
+  if(artBeadTouch!==touch)return;
+  const outer=$('#lightbox').getBoundingClientRect(),rect=artRosaryWrap.getBoundingClientRect();
+  touch.originX=rect.left-outer.left;touch.originY=rect.top-outer.top;
+  touch.dragging=true;touch.timer=null;
+  artRosaryWrap.classList.add('is-positioning');
+  setArtRosaryPixels(touch.originX,touch.originY);
+  try{navigator.vibrate?.(25);}catch(_){}
+ },600);
+ try{artRosaryWrap.setPointerCapture(e.pointerId);}catch(_){}
+ e.stopPropagation();
+});
+artRosaryWrap.addEventListener('pointermove',e=>{
+ const t=artBeadTouch;if(!t||t.pointerId!==e.pointerId)return;
+ const dx=e.clientX-t.x,dy=e.clientY-t.y;
+ if(t.dragging){e.preventDefault();setArtRosaryPixels(t.originX+dx,t.originY+dy);}
+ else if(Math.hypot(dx,dy)>10)stopArtRosaryHold();
+ e.stopPropagation();
+});
+function finishArtRosaryPointer(e,cancel=false){
+ const t=artBeadTouch;if(!t||t.pointerId!==e.pointerId)return;
+ stopArtRosaryHold();artBeadTouch=null;
+ artRosaryWrap.classList.remove('is-positioning');
+ if(t.dragging){saveArtRosaryPosition();applyArtRosaryPosition();}
+ else if(!cancel){const dx=e.clientX-t.x,dy=e.clientY-t.y;
+  if(Math.abs(dy)>24&&Math.abs(dy)>Math.abs(dx))stepArtRosary(t.id==='start',dy<0?1:-1);
+ }
+ ignoreMouseClickUntil=Date.now()+650;
+ try{if(artRosaryWrap.hasPointerCapture(e.pointerId))artRosaryWrap.releasePointerCapture(e.pointerId);}catch(_){}
+ e.stopPropagation();
+}
+artRosaryWrap.addEventListener('pointerup',e=>finishArtRosaryPointer(e));
+artRosaryWrap.addEventListener('pointercancel',e=>finishArtRosaryPointer(e,true));
+artRosaryWrap.addEventListener('contextmenu',e=>e.preventDefault());
+artRosaryWrap.addEventListener('click',e=>e.stopPropagation());
 artRosaryWrap.addEventListener('keydown',e=>{const b=e.target.closest('[data-art-rosary]');if(!b)return;if(e.key==='ArrowUp'||e.key==='ArrowDown'){e.preventDefault();stepArtRosary(b.dataset.artRosary==='start',e.key==='ArrowUp'?1:-1);}});
+window.addEventListener('resize',()=>{if($('#lightbox').open&&!artBeadTouch)applyArtRosaryPosition();});
+window.addEventListener('rosary-art-rosary-position-restored',()=>{artRosaryPosition=readArtRosaryPosition();if($('#lightbox').open)applyArtRosaryPosition();});
 function advanceArt(step,landing='first'){
  let next,opening=false;
  if(lightboxIsOpening){next=step>0?lightboxDecade:(lightboxDecade+19)%20;}
@@ -399,7 +474,7 @@ $('#lightbox').addEventListener('touchend',e=>{
 $('#lightbox').addEventListener('touchcancel',()=>{pinchStart=null;dragStart=null;lightboxTouch=null;touchWasMulti=false;cancelArtTap();});
 $('#lightbox').addEventListener('keydown',e=>{if(e.key==='ArrowLeft'){e.preventDefault();advanceArt(-1);}if(e.key==='ArrowRight'){e.preventDefault();advanceArt(1);}});
 $('#closeLightbox').onclick=()=>$('#lightbox').close();
-$('#lightbox').addEventListener('close',()=>{const target=lightboxDecade,targetOpening=lightboxIsOpening;lightboxSequence++;$('#largeArt').removeAttribute('src');if(lightboxURL)URL.revokeObjectURL(lightboxURL);lightboxURL=null;resetArtZoom();cancelArtTap();lastArtTap=0;$('#lightbox').classList.remove('controls-hidden');artBeadTouch=null;if(tab==='mysteries'&&(decade!==target||isOpening!==targetOpening)){decade=target;isOpening=targetOpening;manage=false;render();window.scrollTo(0,0);}else if(tab==='mysteries'){syncMainRosaryDisplay();}syncWakeLock();});
+$('#lightbox').addEventListener('close',()=>{const target=lightboxDecade,targetOpening=lightboxIsOpening;lightboxSequence++;$('#largeArt').removeAttribute('src');if(lightboxURL)URL.revokeObjectURL(lightboxURL);lightboxURL=null;resetArtZoom();cancelArtTap();lastArtTap=0;$('#lightbox').classList.remove('controls-hidden');stopArtRosaryHold();artBeadTouch=null;artRosaryWrap.classList.remove('is-positioning');if(tab==='mysteries'&&(decade!==target||isOpening!==targetOpening)){decade=target;isOpening=targetOpening;manage=false;render();window.scrollTo(0,0);}else if(tab==='mysteries'){syncMainRosaryDisplay();}syncWakeLock();});
 $('#lightbox').addEventListener('cancel',()=>{lightboxTouch=null;});
 $('#lightbox').addEventListener('click',e=>{if(e.target.closest('button'))return;if(Date.now()<ignoreMouseClickUntil)return;registerArtTap();});
 function download(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);}
