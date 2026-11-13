@@ -484,8 +484,10 @@ function advanceArt(step,landing='first'){
 let artScale=1,artX=0,artY=0,pinchStart=null,dragStart=null,lastArtTap=0;
 let artTapTimer=null,ignoreMouseClickUntil=0,touchWasMulti=false;
 function cancelArtTap(){if(artTapTimer!==null){clearTimeout(artTapTimer);artTapTimer=null;}}
-function toggleArtControls(){const viewer=$('#lightbox');viewer.classList.toggle('controls-hidden');}
+function toggleArtControls(){if(!lightboxPrayerPanel.hidden)return;const viewer=$('#lightbox');viewer.classList.toggle('controls-hidden');}
 function registerArtTap(){
+ // Prayer mode uses its own controls: tapping outside the prayer panel must not toggle the artwork UI.
+ if(!lightboxPrayerPanel.hidden)return;
  const now=Date.now();
  if(now-lastArtTap<330){cancelArtTap();lastArtTap=0;artScale=artScale>1.01?1:2.5;artX=0;artY=0;renderArtZoom();}
  else{lastArtTap=now;cancelArtTap();artTapTimer=setTimeout(()=>{artTapTimer=null;lastArtTap=0;toggleArtControls();},335);}

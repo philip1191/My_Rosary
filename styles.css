@@ -276,6 +276,9 @@ footer{margin-top:28px}
  background:#0008;color:#fff;touch-action:manipulation;
  -webkit-tap-highlight-color:transparent;
 }
+/* Keep the prayer-mode switch in sync with the existing artwork controls toggle. */
+#lightbox.controls-hidden:not(.prayer-overlay-active) .lightbox-prayers-trigger{opacity:0;visibility:hidden;pointer-events:none;}
+#lightbox .lightbox-prayers-trigger{transition:opacity .15s ease,visibility .15s ease,background .15s ease;}
 #lightbox .lightbox-prayers-trigger svg{display:block;width:29px;height:29px;flex:none;}
 #lightbox .lightbox-prayers-trigger[aria-expanded="true"]{background:#ffffff30;border-color:#fff;}
 #lightbox .lightbox-prayers-trigger:focus-visible{outline:2px solid #fff;outline-offset:3px;}
