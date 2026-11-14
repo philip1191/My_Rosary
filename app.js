@@ -458,7 +458,7 @@ function finishArtRosaryPointer(e,cancel=false){
  artRosaryWrap.classList.remove('is-positioning');
  if(t.dragging){saveArtRosaryPosition();applyArtRosaryPosition();}
  else if(!cancel){const dx=e.clientX-t.x,dy=e.clientY-t.y;
-  if(Math.abs(dy)>24&&Math.abs(dy)>Math.abs(dx))stepArtRosary(t.id==='start',dy<0?1:-1);
+  if(Math.abs(dy)>20&&Math.abs(dy)>Math.abs(dx)*0.5)stepArtRosary(t.id==='start',dy<0?1:-1);
  }
  ignoreMouseClickUntil=Date.now()+650;
  try{if(artRosaryWrap.hasPointerCapture(e.pointerId))artRosaryWrap.releasePointerCapture(e.pointerId);}catch(_){}
