@@ -3,11 +3,12 @@ import {PrayerStore,blankState,blankOpening,parseBackup,explainError} from './st
 import {MYSTERIES,START_PRAYERS,DECADE_PRAYERS} from './mysteries.js';
 import {notifyBeadChange} from './rosary-alerts.js';
 import {createPrayerImageExporter} from './export-image.js';
+import {monthKey,monthStatistics,lifetimeStatistics,rollingMonths} from './statistics.js';
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const localDate=(d=new Date())=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 const prayerImageExporter=createPrayerImageExporter({getAsset:id=>store.getAsset(id),logoSource:()=>document.querySelector('.brand .brand-logo')?.src||new URL('./default-header-logo.png',import.meta.url).href});
-const store=new PrayerStore();let state=blankState(),tab='calendar',selected=localDate(),month=new Date(new Date().getFullYear(),new Date().getMonth(),1),decade=0,isOpening=true,artURL=null,renderToken=0,manage=false;
+const store=new PrayerStore();let state=blankState(),tab='calendar',selected=localDate(),month=new Date(new Date().getFullYear(),new Date().getMonth(),1),statsMonth=new Date(new Date().getFullYear(),new Date().getMonth(),1),decade=0,isOpening=true,artURL=null,renderToken=0,manage=false;
 const activeKey=()=>isOpening?'opening':decade;
 const pageData=(s,key=activeKey())=>key==='opening'?(s.opening||blankOpening()):s.decades[key];
 const editablePage=(s,key)=>key==='opening'?(s.opening||(s.opening=blankOpening())):s.decades[key];
@@ -115,7 +116,7 @@ function render(){
  $('#openSettings').setAttribute('aria-pressed',String(tab==='appearance')); 
  $('#main').hidden=tab==='appearance';$('#appearancePage').hidden=tab!=='appearance';
  if(tab==='appearance'){window.dispatchEvent(new Event('rosary-appearance-open'));return;}
- if(tab==='calendar')renderCalendar();if(tab==='mysteries')renderMystery();if(tab==='prayers')renderPrayers();
+ if(tab==='calendar')renderCalendar();if(tab==='mysteries')renderMystery();if(tab==='prayers')renderPrayers();if(tab==='statistics')renderStatistics();
 }
 function renderCalendar(){
  const year=month.getFullYear(),m=month.getMonth(),first=new Date(year,m,1).getDay(),days=new Date(year,m+1,0).getDate(),prefix=`${year}-${String(m+1).padStart(2,'0')}`;
@@ -123,6 +124,38 @@ function renderCalendar(){
  $('#main').innerHTML=`<div class="section-heading"><div><h2>${year}년 ${m+1}월</h2></div><div class="month-nav"><button id="prevMonth" aria-label="이전 달">‹</button><button id="today" style="font-size:12px">오늘</button><button id="nextMonth" aria-label="다음 달">›</button></div></div><div class="calendar-layout"><section class="panel calendar-panel" aria-label="월별 달력"><div class="weekdays">${['일','월','화','수','목','금','토'].map((v,i)=>`<span class="${i===0?'weekday-sun':''}">${v}</span>`).join('')}</div><div class="calendar-grid">${'<span></span>'.repeat(first)}${Array.from({length:days},(_,i)=>{const date=`${prefix}-${String(i+1).padStart(2,'0')}`,r=state.records[date];return `<button class="date ${date===selected?'selected':''} ${date===localDate()?'today':''}" data-date="${date}" aria-label="${m+1}월 ${i+1}일${r?`, ${r.count}단 기록`:''}" aria-pressed="${date===selected}"><span>${i+1}</span><span class="mark">${r?r.count?`${r.count}단`:'•':''}</span></button>`;}).join('')}</div><div class="calendar-foot"><div><strong>${prayed}</strong>기도한 날</div><div><strong>${total}</strong>이번 달 기도 단수</div></div></section><section class="panel" id="recordPanel"></section></div>`;
  $('#prevMonth').onclick=action(async()=>{await flush();month=new Date(year,m-1,1);renderCalendar();});$('#nextMonth').onclick=action(async()=>{await flush();month=new Date(year,m+1,1);renderCalendar();});$('#today').onclick=action(async()=>{await flush();selected=localDate();month=new Date(new Date().getFullYear(),new Date().getMonth(),1);renderCalendar();});
  $$('[data-date]').forEach(b=>b.onclick=action(async()=>{await flush();selected=b.dataset.date;renderCalendar();}));renderRecord();
+}
+// Read the existing records only: there is no fabricated prayer-session counter.
+function renderStatistics(){
+ const year=statsMonth.getFullYear(),monthIndex=statsMonth.getMonth(),key=monthKey(year,monthIndex);
+ const current=monthStatistics(state.records,key),lifetime=lifetimeStatistics(state.records),history=rollingMonths(state.records,year,monthIndex);
+ const maxMonth=Math.max(1,...history.map(m=>m.total));
+ const format=n=>n.toLocaleString('ko-KR');
+ const names=indices=>indices.map(i=>MYSTERIES[i].name).join(' · ');
+ const winner=current.leaders.length?names(current.leaders):'기록 없음';
+ const mix=(counts,total)=>{const uncategorized=Math.max(0,total-counts.reduce((a,b)=>a+b,0));return `<div class="stat-mystery-list">${MYSTERIES.map((m,i)=>{
+  const count=counts[i],pct=total?Math.round(count/total*100):0;
+  return `<div class="stat-mystery-item"><div class="stat-mystery-label"><span>${esc(m.name)}</span><strong>${format(count)}단 <small>(${pct}%)</small></strong></div><div class="stat-track"><span style="width:${total?count/total*100:0}%"></span></div></div>`;
+ }).join('')}${uncategorized?`<div class="stat-mystery-item"><div class="stat-mystery-label"><span>신비 미분류 (이전 기록)</span><strong>${format(uncategorized)}단</strong></div><div class="stat-track"><span style="width:${uncategorized/total*100}%"></span></div></div>`:''}</div>`;};
+ $('#main').innerHTML=`<div class="section-heading"><div><h2>기도 통계</h2><p class="muted">달력에 저장된 기록을 기준으로 집계합니다.</p></div><div class="month-nav"><button id="statsPrev" type="button" aria-label="이전 달">‹</button><button id="statsCurrent" type="button" class="stat-current-month">이번 달</button><button id="statsNext" type="button" aria-label="다음 달">›</button></div></div>
+ <h3 class="stats-period">${year}년 ${monthIndex+1}월</h3>
+ <div class="stats-summary">
+  <section class="panel stat-summary-card"><span>기도한 단수</span><strong>${format(current.total)}<small>단</small></strong></section>
+  <section class="panel stat-summary-card"><span>기도한 날</span><strong>${format(current.days)}<small>일</small></strong></section>
+  <section class="panel stat-summary-card"><span>5단 기준 환산</span><strong>${format(Math.floor(current.total/5))}<small>회분${current.total%5?` + ${current.total%5}단`:''}</small></strong></section>
+  <section class="panel stat-summary-card"><span>가장 자주 바친 신비</span><strong class="stat-leader">${esc(winner)}</strong></section>
+ </div>
+ <div class="stats-grid">
+  <section class="panel"><h3>이달의 신비별 기록</h3><p class="muted">각 신비에 기록된 단수와 전체에서 차지하는 비중입니다.</p>${mix(current.byMystery,current.total)}</section>
+  <section class="panel"><h3>최근 12개월</h3><p class="muted">선택한 달까지 매월 기도한 단수를 비교합니다.</p>
+   <div class="stat-chart-scroll"><div class="stat-chart" role="img" aria-label="${esc(history.map(m=>`${m.year}년 ${m.month}월 ${m.total}단`).join(', '))}">${history.map(m=>`<div class="stat-chart-col" title="${m.year}년 ${m.month}월 · ${m.total}단"><span class="stat-chart-value">${format(m.total)}</span><div class="stat-chart-area"><span class="stat-chart-bar ${m.key===key?'current':''}" style="height:${m.total?Math.max(4,m.total/maxMonth*100):0}%"></span></div><span class="stat-chart-label">${m.month}월</span></div>`).join('')}</div></div>
+  </section>
+ </div>
+ <section class="panel stat-lifetime"><h3>전체 기록의 신비별 분포</h3><p class="muted">누적 ${format(lifetime.total)}단 · 기도한 날 ${format(lifetime.days)}일${lifetime.leaders.length?` · 가장 많이 바친 신비: ${esc(names(lifetime.leaders))}`:''}</p>${mix(lifetime.byMystery,lifetime.total)}</section>
+ <p class="muted stat-note">※ 5단 환산은 기록한 단수를 5로 나눈 참고값이며 실제 기도 시작·완료 횟수와 다를 수 있습니다. 기도문을 열어본 횟수나 기도 시간은 저장하지 않으므로 포함하지 않습니다.</p>`;
+ $('#statsPrev').onclick=()=>{statsMonth=new Date(year,monthIndex-1,1);renderStatistics();};
+ $('#statsNext').onclick=()=>{statsMonth=new Date(year,monthIndex+1,1);renderStatistics();};
+ $('#statsCurrent').onclick=()=>{const now=new Date();statsMonth=new Date(now.getFullYear(),now.getMonth(),1);renderStatistics();};
 }
 function recordMysteries(r){if(Array.isArray(r.mysteries))return r.mysteries;const n=[0,0,0,0];if(Number.isInteger(r.mystery))n[r.mystery]=r.count;return n;}
 function renderRecord(){
@@ -184,7 +217,7 @@ function renderMystery(){
  artButton.addEventListener('pointerdown',e=>{if(e.isPrimary){artGesture={x:e.clientX,y:e.clientY};artSwiped=false;}});
  artButton.addEventListener('pointerup',e=>{if(!artGesture)return;const dx=e.clientX-artGesture.x,dy=e.clientY-artGesture.y;artGesture=null;if(Math.abs(dx)>45&&Math.abs(dx)>Math.abs(dy)*1.25){artSwiped=true;pendingRosaryLanding=null;(dx<0?moveNextPage():movePreviousPage()).catch(error);}});
  artButton.addEventListener('pointercancel',()=>{artGesture=null;});
- artButton.onclick=()=>{if(artSwiped){artSwiped=false;return;}if(artURL){lightboxDecade=decade;lightboxIsOpening=isOpening;$('#lightbox').classList.remove('controls-hidden');$('#lightbox').showModal();showLightboxArt(decade,isOpening);syncWakeLock();}else if(!d.art)chooseImage();};
+ artButton.onclick=()=>{if(artSwiped){artSwiped=false;return;}if(artURL)openArtworkViewer(decade,isOpening);else if(!d.art)chooseImage();};
  if(d.art){loadArt(d.art,renderToken).catch(error);$('#deleteArt').onclick=action(async()=>{if(confirm('이 단의 성화를 삭제할까요?')){const id=activeKey();await track(store.mutate(s=>{editablePage(s,id).art=null;}));render();}});}
  $('#toggleScripture').onclick=()=>{const area=$('#scriptureContents');area.hidden=!area.hidden;$('#toggleScripture').setAttribute('aria-expanded',String(!area.hidden));};
  renderScriptures();
@@ -363,8 +396,33 @@ async function showLightboxArt(id,opening=false){
   $('#largeArt').hidden=false;
  }catch(e){if(seq===lightboxSequence)error(e);}
 }
-// Ask supported browsers to use a dark system bar while artwork is enlarged.
-// Restore the current app theme on closing; unsupported browsers keep their own bars.
+// A <dialog> cannot itself be the target of requestFullscreen(). Its parent
+// enters the Fullscreen API first; the modal is then shown above it in the top layer.
+// Request while the original tap still has user activation (before awaiting image IO).
+let artworkOpenRequest=0;
+function openArtworkViewer(id,opening){
+ const request=++artworkOpenRequest,viewer=$('#lightbox'),shell=$('#lightboxShell');
+ const show=()=>{
+  if(request!==artworkOpenRequest||viewer.open)return;
+  lightboxDecade=id;lightboxIsOpening=opening;
+  viewer.classList.remove('controls-hidden');
+  viewer.showModal();
+  showLightboxArt(id,opening);
+  syncWakeLock();
+ };
+ if(shell.requestFullscreen&&document.fullscreenEnabled&&!document.fullscreenElement){
+  try{Promise.resolve(shell.requestFullscreen({navigationUI:'hide'})).then(show,show);}
+  catch(_){show();}
+ }else show();
+}
+document.addEventListener('fullscreenchange',()=>{
+ // The Android Back gesture may exit immersive mode without closing the dialog.
+ if(document.fullscreenElement!==$('#lightboxShell')&&$('#lightbox').open){
+  artworkOpenRequest++;
+  $('#lightbox').close();
+ }
+});
+
 function artRosaryNames(start,id){return start?START_PRAYERS:(id%5===4?[...DECADE_PRAYERS,'(성모찬송)성호경']:DECADE_PRAYERS);}
 function artRosaryIndex(start,id){const n=getRosaryProgress(start,id);return Math.max(0,Math.min(artRosaryNames(start,id).length-1,n));}
 function renderArtRosaries(){
@@ -532,7 +590,7 @@ $('#lightbox').addEventListener('touchend',e=>{
 $('#lightbox').addEventListener('touchcancel',()=>{pinchStart=null;dragStart=null;lightboxTouch=null;touchWasMulti=false;cancelArtTap();});
 $('#lightbox').addEventListener('keydown',e=>{if(e.key==='ArrowLeft'){e.preventDefault();advanceArt(-1);}if(e.key==='ArrowRight'){e.preventDefault();advanceArt(1);}});
 $('#closeLightbox').onclick=()=>$('#lightbox').close();
-$('#lightbox').addEventListener('close',()=>{setLightboxPrayerMode(false);const target=lightboxDecade,targetOpening=lightboxIsOpening;lightboxSequence++;$('#largeArt').removeAttribute('src');if(lightboxURL)URL.revokeObjectURL(lightboxURL);lightboxURL=null;resetArtZoom();cancelArtTap();lastArtTap=0;$('#lightbox').classList.remove('controls-hidden');stopArtRosaryHold();artBeadTouch=null;artRosaryWrap.classList.remove('is-positioning');if(tab==='mysteries'&&(decade!==target||isOpening!==targetOpening)){decade=target;isOpening=targetOpening;manage=false;render();window.scrollTo(0,0);}else if(tab==='mysteries'){syncMainRosaryDisplay();}syncWakeLock();});
+$('#lightbox').addEventListener('close',()=>{artworkOpenRequest++;if(document.fullscreenElement===$('#lightboxShell'))document.exitFullscreen().catch(()=>{});setLightboxPrayerMode(false);const target=lightboxDecade,targetOpening=lightboxIsOpening;lightboxSequence++;$('#largeArt').removeAttribute('src');if(lightboxURL)URL.revokeObjectURL(lightboxURL);lightboxURL=null;resetArtZoom();cancelArtTap();lastArtTap=0;$('#lightbox').classList.remove('controls-hidden');stopArtRosaryHold();artBeadTouch=null;artRosaryWrap.classList.remove('is-positioning');if(tab==='mysteries'&&(decade!==target||isOpening!==targetOpening)){decade=target;isOpening=targetOpening;manage=false;render();window.scrollTo(0,0);}else if(tab==='mysteries'){syncMainRosaryDisplay();}syncWakeLock();});
 $('#lightbox').addEventListener('cancel',()=>{lightboxTouch=null;});
 $('#lightbox').addEventListener('click',e=>{if(e.target.closest('button'))return;if(Date.now()<ignoreMouseClickUntil)return;registerArtTap();});
 function download(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);}
